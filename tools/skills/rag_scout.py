@@ -60,8 +60,9 @@ def create_repo_map(db_path: str, output_file: str):
         repo_map[repo][directory].append(filename)
 
     # 3. Kiírjuk az eredményt fájlba (Markdown/Text formátumban a könnyű olvasásért)
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write("# 🗺️ RAG KÖNYVTÁRI KATALÓGUS (FRAKTÁL-MEMÓRIA MAPPA)\n")
+        f.write("# 🗺️ MX LINUX RAG KÖNYVTÁRI KATALÓGUS (FRAKTÁL-MEMÓRIA MAPPA)\n")
         f.write("Használat: Ezt a fájlt olvasd, hogy megtudd, hol keresd a kódot. Ha megvan a fájl, használd a rag_interrogator.py-t!\n\n")
 
         for repo in sorted(repo_map.keys()):
@@ -94,7 +95,7 @@ def extract_signatures(db_path: str, output_file: str, target_repo: str = None, 
     cursor = conn.cursor()
 
     # Építjük az alapszűrést
-    base_query = "SELECT source_repo, filepath, content FROM rag_data WHERE filepath LIKE '%.py'"
+    base_query = "SELECT source_repo, filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.bash' OR filepath LIKE '%.md'"
     params = []
 
     if target_repo:

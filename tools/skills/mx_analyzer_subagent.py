@@ -59,42 +59,36 @@ def run_restoration_analysis():
     print("🤖 [Restoration Architect Subagent] Mélyfúrás és Kód Kivonatolás Indítása...")
 
     db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "mx_linux_knowledge.db")
-    out_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "KNOWLEDGE_MAPS", "restoration_architectures.jsonl")
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Skill", "Utils maps")
+    os.makedirs(out_dir, exist_ok=True)
+    out_file = os.path.join(out_dir, "mx_linux_signatures_full.txt")
 
     if not os.path.exists(db_path):
         print(f"❌ Hiba: Nem találom a RAG adatbázist: {db_path}")
         return
 
-    # Azok a repók, amikből a "kész restaurátorokat" megérthetjük
-    target_repos = [
-        "BasicSR-master", "CodeFormer-master", "GFPGAN-master",
-        "VRT-main", "vs-mlrt-master", "Real-ESRGAN-master"
-    ]
-
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    placeholders = ','.join(['?'] * len(target_repos))
-    query = f"SELECT source_repo, filepath, content FROM rag_data WHERE source_repo IN ({placeholders}) AND filepath LIKE '%.py'"
+    query = "SELECT source_repo, filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.bash'"
 
     try:
-        cursor.execute(query, target_repos)
+        cursor.execute(query)
         rows = cursor.fetchall()
     except Exception as e:
         print(f"Hiba az SQL lekérdezésben: {e}")
         conn.close()
         return
 
-    print(f"📂 {len(rows)} Python forrásfájl feldolgozása a {len(target_repos)} kulcsfontosságú repóból...")
+    print(f"📂 {len(rows)} forrásfájl feldolgozása a teljes adatbázisból...")
 
-    # Ha volt előző fájl, felülírjuk, hogy ne duzzadjon a végtelenségig
     with open(out_file, "w", encoding="utf-8") as f:
-        pass
+        f.write("# 🧩 MX LINUX SZIGNATÚRA TÉRKÉP (Mélyfúrás test nélkül)\n\n")
 
     extracted_count = 0
 
     with open(out_file, "a", encoding="utf-8") as f:
-        for repo, filepath, content in rows:
+        for repo, filepath, content in sorted(rows, key=lambda x: (x[0], x[1])):
             if not content: continue
 
             # Kinyerjük az architekturális vázat
@@ -102,21 +96,23 @@ def run_restoration_analysis():
 
             # Csak akkor mentjük, ha találtunk valami érdemlegeset (osztályt vagy AI importot)
             if arch["classes"] or arch["functions"] or arch["imports"]:
-                entry = {
-                    "repo": repo,
-                    "file": filepath,
-                    "architecture": arch
-                }
-                f.write(json.dumps(entry) + "\n")
+                f.write(f"📜 {repo}/{filepath}\n")
+                for cls_name, methods in arch.get("classes", {}).items():
+                    f.write(f"    Class: {cls_name}\n")
+                    for method in methods:
+                        f.write(f"      Method/Func: {method}\n")
+                for func in arch.get("functions", []):
+                    f.write(f"    Func: {func}\n")
+                f.write("\n")
                 extracted_count += 1
 
     conn.close()
-    print(f"✅ [Restoration Architect Subagent] Kész! {extracted_count} fájl Architektúrája (OOM-Safe JSONL formátumban) kimentve ide: {out_file}")
+    print(f"✅ [Restoration Architect Subagent] Kész! {extracted_count} fájl Architektúrája kimentve ide: {out_file}")
 
     # Hívjuk meg a Memória Menedzsert, hogy a Fő Agent tudjon róla!
     sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     from ENVIRONMENT_SETUP.agent_memory_manager import write_memory
-    write_memory("Subagent_Report", f"A restoration_analyzer_subagent.py kigyűjtötte a {', '.join(target_repos)} architekturális vázát a restoration_architectures.jsonl fájlba. Ebből kell megépítenem a mi restaurátorunkat.")
+    write_memory("Subagent_Report", f"Az mx_analyzer_subagent.py kigyűjtötte a teljes MX LINUX RAG architekturális vázát a Skill/Utils maps/mx_linux_signatures_full.txt fájlba.")
 
 if __name__ == "__main__":
     run_restoration_analysis()
