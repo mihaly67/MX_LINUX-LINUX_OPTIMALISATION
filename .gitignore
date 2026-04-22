@@ -1,5 +1,6 @@
 # Ignore RAG databases and extracted data
-Knowledge_Base/
+Knowledge_Base/*
+!Knowledge_Base/agent_memory.jsonl
 *.zip
 *.db
 *.sqlite
