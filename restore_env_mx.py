@@ -84,7 +84,7 @@ def check_sqlite_integrity(db_path):
 
 def process_resource(key, config):
     print(f"\n🔧 Feldolgozás: {key}...")
-    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     target_dir = os.path.join(script_dir, config.get("extract_to"))
     check_file = config.get("check_file")
     zip_name = os.path.join(script_dir, config["file"])
@@ -142,7 +142,7 @@ def main():
     print(f"\n{Fore.CYAN}💓 Indítom az Agent Keep-Alive Démont a háttérben...{Style.RESET_ALL}")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     log_file_path = os.path.join(script_dir, "supervisor.log")
-    keepalive_path = os.path.join(script_dir, "agent_keepalive.py")
+    keepalive_path = os.path.join(script_dir, "tools", "agent_keepalive.py")
     
     if os.path.exists(keepalive_path):
         log_file = open(log_file_path, "w")
@@ -151,7 +151,7 @@ def main():
         print(f"{Fore.YELLOW}⚠️ agent_keepalive.py nem található a tools mappában!{Style.RESET_ALL}")
 
     print(f"{Fore.CYAN}🧠 Memória [SESSION_START] inicializálása a háttérben...{Style.RESET_ALL}")
-    memory_manager_path = os.path.join(os.path.dirname(script_dir), "ENVIRONMENT_SETUP", "agent_memory_manager.py")
+    memory_manager_path = os.path.join(script_dir, "ENVIRONMENT_SETUP", "agent_memory_manager.py")
     if os.path.exists(memory_manager_path):
         subprocess.run([sys.executable, memory_manager_path, "--action", "start_session"])
     else:
