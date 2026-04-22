@@ -4,7 +4,7 @@ import re
 import sys
 
 # Hozzáférés az Agent Memória Menedzserhez
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from ENVIRONMENT_SETUP.agent_memory_manager import write_memory
 
 def run_autonomous_scout():
@@ -15,7 +15,7 @@ def run_autonomous_scout():
     """
     print("🤖 AUTONÓM FELDERÍTŐ INDÍTÁSA (Deep Drill a Skill RAG-on)...")
 
-    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Knowledge_Base", "RAG_DB", "RAG_CHATBOT_CSV_DATA_LLM_github.db")
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "mx_linux_knowledge.db")
 
     if not os.path.exists(db_path):
         print(f"❌ Adatbázis nem található: {db_path}")
@@ -65,13 +65,13 @@ def run_autonomous_scout():
 
     conn.close()
 
-    out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Knowledge_Base", "KNOWLEDGE_MAPS")
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Skill", "Utils maps")
     os.makedirs(out_dir, exist_ok=True)
-    report_file = os.path.join(out_dir, "skill_rag_deep_drill.md")
+    report_file = os.path.join(out_dir, "mx_linux_deep_drill_full.md")
 
     with open(report_file, 'w', encoding='utf-8') as f:
-        f.write("# 🔬 AUTONÓM MÉLYFÚRÁS (Skill RAG Deep Drill Report)\n")
-        f.write("Adatbázis: RAG_CHATBOT_CSV_DATA_LLM_github.db\n")
+        f.write("# 🔬 AUTONÓM MÉLYFÚRÁS (MX Linux Deep Drill Report)\n")
+        f.write("Adatbázis: mx_linux_knowledge.db\n")
         f.write("Ezek azok a fejlett AI Agent, Adatbázis elemző és MCP eszközök, amiket a videomunka automatizálására/támogatására használhatunk.\n\n")
 
         for repo in sorted(repo_insights.keys()):
@@ -94,9 +94,9 @@ def run_autonomous_scout():
 
             f.write("\n" + "-"*40 + "\n\n")
 
-    print(f"\n✅ Autonóm Felderítés befejezve. A teljes térkép a KNOWLEDGE_MAPS mappában: {report_file}")
+    print(f"\n✅ Autonóm Felderítés befejezve. A teljes térkép a Skill/Utils maps mappában: {report_file}")
 
-    write_memory("Auto_Scout_Report", f"A Skill RAG (RAG_CHATBOT_CSV_DATA_LLM_github.db) mélyfúrása lefutott. {len(repo_insights)} repository-t elemeztem ki, a teljes jelentés a KNOWLEDGE_MAPS/skill_rag_deep_drill.md fájlban van.")
+    write_memory("Auto_Scout_Report", f"A MX Linux RAG (mx_linux_knowledge.db) mélyfúrása lefutott. {len(repo_insights)} repository-t elemeztem ki, a teljes jelentés a Skill/Utils maps/mx_linux_deep_drill_full.md fájlban van.")
 
 if __name__ == "__main__":
     run_autonomous_scout()
