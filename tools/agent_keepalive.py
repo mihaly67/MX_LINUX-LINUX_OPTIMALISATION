@@ -51,7 +51,7 @@ def run_daemon():
             sys.stdout.flush()
 
             # Ciklusidő (15 mp bőven elég, hogy a Docker I/O-t pörgesse)
-            time.sleep(15)
+            time.sleep(600)
 
     except KeyboardInterrupt:
         print("\n💓 [Supervisor Daemon] Leállítva.", flush=True)
