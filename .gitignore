@@ -27,4 +27,5 @@ venv.bak/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db.agent_heartbeat
+Thumbs.db
+.agent_heartbeat
