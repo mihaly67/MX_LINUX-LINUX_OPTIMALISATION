@@ -15,7 +15,7 @@ def run_autonomous_scout():
     """
     print("🤖 AUTONÓM FELDERÍTŐ INDÍTÁSA (Deep Drill a Skill RAG-on)...")
 
-    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "SWAT4_RAG.db")
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "mx_linux_knowledge.db")
 
     if not os.path.exists(db_path):
         print(f"❌ Adatbázis nem található: {db_path}")
@@ -67,11 +67,11 @@ def run_autonomous_scout():
 
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Skill", "Utils maps")
     os.makedirs(out_dir, exist_ok=True)
-    report_file = os.path.join(out_dir, "swat4_deep_drill_full.md")
+    report_file = os.path.join(out_dir, "mx_linux_deep_drill_full.md")
 
     with open(report_file, 'w', encoding='utf-8') as f:
-        f.write("# 🔬 AUTONÓM MÉLYFÚRÁS (SWAT4 Black Ops Deep Drill Report)\n")
-        f.write("Adatbázis: SWAT4_RAG.db\n")
+        f.write("# 🔬 AUTONÓM MÉLYFÚRÁS (MX Linux Deep Drill Report)\n")
+        f.write("Adatbázis: mx_linux_knowledge.db\n")
         f.write("Ezek azok a fejlett AI Agent, Adatbázis elemző és MCP eszközök, amiket a videomunka automatizálására/támogatására használhatunk.\n\n")
 
         for repo in sorted(repo_insights.keys()):
@@ -96,7 +96,7 @@ def run_autonomous_scout():
 
     print(f"\n✅ Autonóm Felderítés befejezve. A teljes térkép a Skill/Utils maps mappában: {report_file}")
 
-    write_memory("Auto_Scout_Report", f"A SWAT4 RAG (SWAT4_RAG.db) mélyfúrása lefutott. {len(repo_insights)} repository-t elemeztem ki, a teljes jelentés a Skill/Utils maps/swat4_deep_drill_full.md fájlban van.")
+    write_memory("Auto_Scout_Report", f"A MX Linux RAG (mx_linux_knowledge.db) mélyfúrása lefutott. {len(repo_insights)} repository-t elemeztem ki, a teljes jelentés a Skill/Utils maps/mx_linux_deep_drill_full.md fájlban van.")
 
 if __name__ == "__main__":
     run_autonomous_scout()
