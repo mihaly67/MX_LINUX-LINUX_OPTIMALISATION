@@ -48,6 +48,14 @@ ENVIRONMENT_RESOURCES = {
         "check_file": "mx_linux_knowledge.db",
         "type": "zip",
         "preserve_dir": False
+    },
+    "GERILLA_RAG": {
+        "id": "1re0EoQ1H-QauiCmRfvozJlFISL6FSQI3",
+        "file": "GERILLA_RAG.zip",
+        "extract_to": "Knowledge_Base/RAG_DB",
+        "check_file": "Gerilla_RAG.db",
+        "type": "zip",
+        "preserve_dir": False
     }
 }
 
