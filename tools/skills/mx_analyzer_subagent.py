@@ -58,10 +58,10 @@ def parse_python_architecture(content: str):
 def run_restoration_analysis():
     print("🤖 [Restoration Architect Subagent] Mélyfúrás és Kód Kivonatolás Indítása...")
 
-    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "mx_linux_knowledge.db")
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Knowledge_Base", "RAG_DB", "Gerilla_RAG.db")
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Skill", "Utils maps")
     os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, "mx_linux_signatures_full.txt")
+    out_file = os.path.join(out_dir, "gerilla_signatures_full.txt")
 
     if not os.path.exists(db_path):
         print(f"❌ Hiba: Nem találom a RAG adatbázist: {db_path}")
@@ -83,7 +83,7 @@ def run_restoration_analysis():
     print(f"📂 {len(rows)} forrásfájl feldolgozása a teljes adatbázisból...")
 
     with open(out_file, "w", encoding="utf-8") as f:
-        f.write("# 🧩 MX LINUX SZIGNATÚRA TÉRKÉP (Mélyfúrás test nélkül)\n\n")
+        f.write("# 🧩 GERILLA RAG SZIGNATÚRA TÉRKÉP (Mélyfúrás test nélkül)\n\n")
 
     extracted_count = 0
 
@@ -112,7 +112,7 @@ def run_restoration_analysis():
     # Hívjuk meg a Memória Menedzsert, hogy a Fő Agent tudjon róla!
     sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     from ENVIRONMENT_SETUP.agent_memory_manager import write_memory
-    write_memory("Subagent_Report", f"Az mx_analyzer_subagent.py kigyűjtötte a teljes MX LINUX RAG architekturális vázát a Skill/Utils maps/mx_linux_signatures_full.txt fájlba.")
+    write_memory("Subagent_Report", f"Az mx_analyzer_subagent.py kigyűjtötte a teljes Gerilla RAG architekturális vázát a Skill/Utils maps/gerilla_signatures_full.txt fájlba.")
 
 if __name__ == "__main__":
     run_restoration_analysis()
