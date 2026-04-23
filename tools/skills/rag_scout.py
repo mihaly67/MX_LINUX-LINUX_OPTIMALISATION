@@ -62,7 +62,7 @@ def create_repo_map(db_path: str, output_file: str):
     # 3. Kiírjuk az eredményt fájlba (Markdown/Text formátumban a könnyű olvasásért)
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write("# 🗺️ MX LINUX RAG KÖNYVTÁRI KATALÓGUS (FRAKTÁL-MEMÓRIA MAPPA)\n")
+        f.write("# 🗺️ SWAT4 BLACK OPS RAG KÖNYVTÁRI KATALÓGUS (FRAKTÁL-MEMÓRIA MAPPA)\n")
         f.write("Használat: Ezt a fájlt olvasd, hogy megtudd, hol keresd a kódot. Ha megvan a fájl, használd a rag_interrogator.py-t!\n\n")
 
         for repo in sorted(repo_map.keys()):
@@ -156,7 +156,7 @@ def extract_signatures(db_path: str, output_file: str, target_repo: str = None, 
 
     # Eredmények kiírása fájlba
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write("# 🧩 PYTHON SZIGNATÚRA TÉRKÉP (Mélyfúrás test nélkül)\n\n")
+        f.write("# 🧩 SWAT4 BLACK OPS SZIGNATÚRA TÉRKÉP (Mélyfúrás test nélkül)\n\n")
         for filepath in sorted(signature_map.keys()):
             f.write(f"📜 {filepath}\n")
             for sig in signature_map[filepath]:
