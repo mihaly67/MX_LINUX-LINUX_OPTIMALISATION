@@ -42,14 +42,22 @@ async def execute_async(req: CommandRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(execute_bash, req.command)
     return {"status": "Task started in background", "command": req.command}
 
+
 @app.post("/rag_search")
 async def rag_search_sqlite(query: str, db_name: str, limit: int = 5):
     """
     OOM Safe (8GB RAM barát) RAG Kereső.
-    Nem tölti be a 3GB-os FAISS indexet a RAM-ba!
-    Helyette SQLite Full Text Search (vagy LIKE) lekérdezést csinál egyenesen a 300GB-os SSD-ről.
     """
-    db_path = os.path.expanduser(f"~/Jules_mx/RAG_DB/{db_name}")
+    # Javított útvonal a három RAG adatbázishoz:
+    if "Gerilla_RAG" in db_name:
+        db_path = os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db")
+    elif "mx_linux" in db_name:
+        db_path = os.path.expanduser("~/MX_LINUX_RAG/mx_linux_knowledge.db")
+    elif "CHATBOT" in db_name or "Rag_epites" in db_name:
+        db_path = os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db")
+    else:
+        db_path = os.path.expanduser(f"~/Jules_mx/RAG_DB/{db_name}")
+
     if not os.path.exists(db_path):
         return {"error": f"Adatbázis nem található a VPS-en: {db_path}"}
 
@@ -78,4 +86,4 @@ if __name__ == "__main__":
     import uvicorn
     # A 8000-es porton fut, de biztonsági okokból érdemes csak localhoston (127.0.0.1) hallgatni,
     # és SSH port forwarddal elérni, de egyelőre kinyitjuk a teszthez.
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
