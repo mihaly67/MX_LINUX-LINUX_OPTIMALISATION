@@ -5,17 +5,27 @@ import sys
 VPS_IP = "5.189.163.88"
 VPS_USER = "misi"
 
-# Támogatja mind az env változós (kódolt) privát kulcsot, mind a jelszót fallbackként a teszteléshez
-def get_auth_kwargs():
+def get_auth_kwargs(password=None):
     kwargs = {}
 
-    # 1. SSH kulcs fájlból (ha létezik)
+    # 0. Jelszó paraméterből (legmagasabb prioritás visszamenőleges kompatibilitás miatt)
+    if password:
+        kwargs["password"] = password
+        return kwargs
+
+    # 1. Jelszó környezeti változóból
+    pwd = os.environ.get("VPS_PWD")
+    if pwd:
+        kwargs["password"] = pwd
+        return kwargs
+
+    # 2. SSH kulcs fájlból (ha létezik)
     key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets", "jules_vps_key")
     if os.path.exists(key_file):
         kwargs["key_filename"] = key_file
         return kwargs
 
-    # 2. SSH kulcs környezeti változóból (ha Dockerben fut, nem file-ban adják át)
+    # 3. SSH kulcs környezeti változóból (ha Dockerben fut, nem file-ban adják át)
     key_env = os.environ.get("VPS_SSH_KEY")
     if key_env:
         import io
@@ -23,18 +33,12 @@ def get_auth_kwargs():
         kwargs["pkey"] = key_obj
         return kwargs
 
-    # 3. Jelszó környezeti változóból
-    pwd = os.environ.get("VPS_PWD")
-    if pwd:
-        kwargs["password"] = pwd
-        return kwargs
-
     return kwargs
 
-def run_on_vps(command):
+def run_on_vps(command, password=None):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    auth_kwargs = get_auth_kwargs()
+    auth_kwargs = get_auth_kwargs(password)
 
     if not auth_kwargs:
         return False, "❌ Hiba: Nincs érvényes hitelesítési mód (kulcs fájl, VPS_SSH_KEY env, vagy VPS_PWD env)."
@@ -52,11 +56,11 @@ def run_on_vps(command):
     except Exception as e:
         return False, str(e)
 
-def upload_to_vps(local_path, remote_path):
+def upload_to_vps(local_path, remote_path, password=None):
     """SFTP feltöltés a VPS Második Agyára (tehermentesítés)."""
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    auth_kwargs = get_auth_kwargs()
+    auth_kwargs = get_auth_kwargs(password)
 
     if not auth_kwargs:
         return False, "❌ Hiba: Nincs érvényes hitelesítési mód."
