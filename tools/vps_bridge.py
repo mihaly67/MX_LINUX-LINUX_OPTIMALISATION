@@ -4,19 +4,43 @@ import sys
 
 VPS_IP = "5.189.163.88"
 VPS_USER = "misi"
-VPS_PWD = "USER_PROVIDED_PASSWORD"  # Biztonsági okokból (Git commit) nem tartalmazza a nyílt jelszót. Futtatáskor dinamikusan adjuk át.
 
-def run_on_vps(command, password=None):
+# Támogatja mind az env változós (kódolt) privát kulcsot, mind a jelszót fallbackként a teszteléshez
+def get_auth_kwargs():
+    kwargs = {}
+
+    # 1. SSH kulcs fájlból (ha létezik)
+    key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets", "jules_vps_key")
+    if os.path.exists(key_file):
+        kwargs["key_filename"] = key_file
+        return kwargs
+
+    # 2. SSH kulcs környezeti változóból (ha Dockerben fut, nem file-ban adják át)
+    key_env = os.environ.get("VPS_SSH_KEY")
+    if key_env:
+        import io
+        key_obj = paramiko.Ed25519Key.from_private_key(io.StringIO(key_env))
+        kwargs["pkey"] = key_obj
+        return kwargs
+
+    # 3. Jelszó környezeti változóból
+    pwd = os.environ.get("VPS_PWD")
+    if pwd:
+        kwargs["password"] = pwd
+        return kwargs
+
+    return kwargs
+
+def run_on_vps(command):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    auth_kwargs = get_auth_kwargs()
+
+    if not auth_kwargs:
+        return False, "❌ Hiba: Nincs érvényes hitelesítési mód (kulcs fájl, VPS_SSH_KEY env, vagy VPS_PWD env)."
 
     try:
-        # Prioritás: futásidőben megadott jelszó, egyébként környezeti változó
-        pwd = password or os.environ.get("VPS_PWD")
-        if not pwd:
-            return False, "❌ Hiba: Nincs megadva VPS jelszó (VPS_PWD környezeti változó üres)."
-
-        client.connect(hostname=VPS_IP, port=22, username=VPS_USER, password=pwd, timeout=10)
+        client.connect(hostname=VPS_IP, port=22, username=VPS_USER, timeout=10, **auth_kwargs)
 
         stdin, stdout, stderr = client.exec_command(command)
         output = stdout.read().decode("utf-8")
@@ -28,16 +52,17 @@ def run_on_vps(command, password=None):
     except Exception as e:
         return False, str(e)
 
-def upload_to_vps(local_path, remote_path, password=None):
+def upload_to_vps(local_path, remote_path):
     """SFTP feltöltés a VPS Második Agyára (tehermentesítés)."""
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        pwd = password or os.environ.get("VPS_PWD")
-        if not pwd:
-            return False, "❌ Hiba: Nincs megadva VPS jelszó."
+    auth_kwargs = get_auth_kwargs()
 
-        client.connect(hostname=VPS_IP, port=22, username=VPS_USER, password=pwd, timeout=10)
+    if not auth_kwargs:
+        return False, "❌ Hiba: Nincs érvényes hitelesítési mód."
+
+    try:
+        client.connect(hostname=VPS_IP, port=22, username=VPS_USER, timeout=10, **auth_kwargs)
         sftp = client.open_sftp()
         sftp.put(local_path, remote_path)
         sftp.close()
@@ -47,17 +72,12 @@ def upload_to_vps(local_path, remote_path, password=None):
         return False, f"❌ Hiba a feltöltésnél: {e}"
 
 if __name__ == "__main__":
-    pwd = os.environ.get("VPS_PWD")
-    if not pwd:
-        print("❌ Hiba: Kérlek állítsd be a VPS_PWD környezeti változót a futtatás előtt! (pl: export VPS_PWD='...')")
-        sys.exit(1)
-
     if len(sys.argv) > 2 and sys.argv[1] == "--upload":
-        success, out = upload_to_vps(sys.argv[2], sys.argv[3], password=pwd)
+        success, out = upload_to_vps(sys.argv[2], sys.argv[3])
         print(out)
     elif len(sys.argv) > 1:
         cmd = " ".join(sys.argv[1:])
-        success, out = run_on_vps(cmd, password=pwd)
+        success, out = run_on_vps(cmd)
         print(out)
     else:
         print("💡 Használat: \n Parancs futtatása: python3 tools/vps_bridge.py <parancs>\n Fájl feltöltése: python3 tools/vps_bridge.py --upload <helyi_fájl> <távoli_fájl>")
