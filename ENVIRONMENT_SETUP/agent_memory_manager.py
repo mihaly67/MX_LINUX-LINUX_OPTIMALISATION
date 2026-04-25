@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import argparse
 import datetime
@@ -134,6 +135,13 @@ if __name__ == "__main__":
 
     elif args.action == "start_session":
         mark_session("[SESSION_START]")
+        print("\n🤖 [Kontextus Titkár] Automatikus szinkronizáció indítása...")
+        try:
+            import subprocess, sys
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "skills", "context_secretary.py")
+            if os.path.exists(p): subprocess.run([sys.executable, p], check=False)
+        except Exception as e:
+            print(f"⚠️ Hiba a Titkár hívásakor: {e}")
 
     elif args.action == "end_session":
         mark_session("[SESSION_END]")
