@@ -162,9 +162,44 @@ def main():
     memory_manager_path = os.path.join(script_dir, "ENVIRONMENT_SETUP", "agent_memory_manager.py")
     if os.path.exists(memory_manager_path):
         subprocess.run([sys.executable, memory_manager_path, "--action", "start_session"])
+        print(f"{Fore.CYAN}🧠 A VPS Titkár aszinkron felébresztése befejeződött.{Style.RESET_ALL}")
     else:
         print(f"{Fore.YELLOW}⚠️ agent_memory_manager.py nem található!{Style.RESET_ALL}")
         
+
+    print(f"\n{Fore.CYAN}🔑 Nyílt SSH kulcs (Gerilla protokoll) inicializálása és VPS hitelesítés...{Style.RESET_ALL}")
+    secrets_dir = os.path.join(script_dir, "tools", "secrets")
+    os.makedirs(secrets_dir, exist_ok=True)
+
+    key_path = os.path.join(secrets_dir, "jules_vps_key")
+
+    if not os.path.exists(key_path):
+        import subprocess as sp
+        print(f"   ⚙️ SSH kulcs generálása...")
+        sp.run(["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q"])
+
+        # Jelszó biztonságos beolvasása környezeti változóból!
+        vps_pwd = os.environ.get("VPS_PWD")
+        if vps_pwd:
+            try:
+                import paramiko
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(hostname="5.189.163.88", port=22, username="misi", password=vps_pwd, timeout=10)
+
+                with open(key_path + ".pub", "r") as pub_f:
+                    pub_key = pub_f.read().strip()
+
+                client.exec_command(f"echo '{pub_key}' >> ~/.ssh/authorized_keys")
+                client.close()
+                print(f"{Fore.GREEN}   ✅ SSH kulcsok legenerálva és sikeresen regisztrálva a VPS-en.{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}   ❌ Hiba a kulcs VPS-re másolásakor: {e}{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}   ⚠️ SSH kulcsok legenerálva, de a VPS-re nem lettek felmásolva, mert nincs megadva VPS_PWD környezeti változó.{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.GREEN}   ✅ SSH kulcsok már léteznek.{Style.RESET_ALL}")
+
     print(f"\n{Fore.GREEN}✅ KÖRNYEZET KÉSZ. RAG RENDSZER AKTÍV.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
