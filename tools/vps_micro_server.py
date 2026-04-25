@@ -78,6 +78,39 @@ async def rag_search_sqlite(query: str, db_name: str, limit: int = 5):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.post("/summarize_memory")
+def summarize_memory(limit_lines: int = 10):
+    """VPS oldali titkár funkció. Beolvassa a backup.jsonl-t és Qwen-nel összefoglalja."""
+    import requests
+    OLLAMA_URL = "http://localhost:11434/api/generate"
+    MEMORY_PATH = os.path.expanduser("~/Jules_mx/memory_offload/backup.jsonl")
+
+    if not os.path.exists(MEMORY_PATH):
+        return {"error": "Nincs szinkronizált memória a VPS-en (backup.jsonl hiányzik)."}
+
+    try:
+        with open(MEMORY_PATH, 'r', encoding='utf-8') as f:
+            lines = f.readlines()[-limit_lines:]
+
+        memory_text = "".join(lines)
+        if len(memory_text) > 2000:
+            memory_text = memory_text[-2000:]
+
+        prompt = "Foglald össze az alábbi eseménynaplót 3 rövid, tömör pontban magyarul a Fő Agent számára:\n\n" + memory_text
+
+        payload = {
+            "model": "qwen2.5:1.5b",
+            "prompt": prompt,
+            "stream": False,
+            "options": {"num_predict": 150}
+        }
+
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=180)
+        return {"summary": resp.json().get("response", "Üres válasz.")}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/health")
 def health_check():
     return {"status": "Alive", "system": "VPS Second Brain"}
