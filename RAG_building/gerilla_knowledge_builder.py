@@ -36,7 +36,7 @@ IGNORE_DIRS = {
     'samples', 'images', 'results', 'datasets'
 }
 
-MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB max per fájl, hogy ne terheljük a memóriát/RAG-ot
+MAX_FILE_SIZE = 500 * 1024  # 2 MB max per fájl, hogy ne terheljük a memóriát/RAG-ot
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))

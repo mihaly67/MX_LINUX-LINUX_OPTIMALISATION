@@ -25,7 +25,7 @@ def install_dependencies():
 install_dependencies()
 
 try:
-    import gdown
+
     from colorama import Fore, Style, init
     init(autoreset=True)
 except ImportError:
@@ -145,7 +145,7 @@ def process_resource(key, config):
 
 def main():
     print(f"{Fore.CYAN}=== 🚀 MX LINUX OPTIMIZATION RAG DEPLOYMENT ==={Style.RESET_ALL}")
-    for key, config in ENVIRONMENT_RESOURCES.items(): process_resource(key, config)
+    print(f"\n{Fore.CYAN}🔌 RAG Vékonykliens mód aktív. (Az adatbázisokat nem töltjük le lokálisan, a VPS szolgálja ki őket!){Style.RESET_ALL}")
 
     print(f"\n{Fore.CYAN}💓 Indítom az Agent Keep-Alive Démont a háttérben...{Style.RESET_ALL}")
     script_dir = os.path.dirname(os.path.abspath(__file__))
