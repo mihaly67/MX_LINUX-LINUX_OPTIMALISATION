@@ -111,6 +111,71 @@ def summarize_memory(limit_lines: int = 10):
     except Exception as e:
         return {"error": str(e)}
 
+
+@app.get("/scout_progress")
+def scout_progress():
+    """Megmutatja, hol tart a Qwen Scout a repók feldolgozásában."""
+    db_path = os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db")
+    scanned_db = os.path.expanduser("~/Jules_mx/temp/scanned_files.db")
+
+    if not os.path.exists(db_path) or not os.path.exists(scanned_db):
+        return {"error": "Az adatbázisok nem elérhetők."}
+
+    try:
+        conn_rag = sqlite3.connect(db_path)
+        cursor_rag = conn_rag.cursor()
+
+        cursor_rag.execute("SELECT source_repo, COUNT(*) FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' GROUP BY source_repo")
+        total_files = {row[0]: row[1] for row in cursor_rag.fetchall()}
+        conn_rag.close()
+
+        conn_scan = sqlite3.connect(scanned_db)
+        cursor_scan = conn_scan.cursor()
+        cursor_scan.execute("SELECT filepath FROM scanned")
+        scanned_files = [row[0] for row in cursor_scan.fetchall()]
+        conn_scan.close()
+
+        scanned_by_repo = {}
+        for f in scanned_files:
+            repo = f.split("/")[0] if "/" in f else "Unknown"
+            scanned_by_repo[repo] = scanned_by_repo.get(repo, 0) + 1
+
+        progress = {}
+        total_all = 0
+        scanned_all = 0
+        for repo, total in total_files.items():
+            sc = scanned_by_repo.get(repo, 0)
+            progress[repo] = f"{sc}/{total} ({round((sc/total)*100, 2)}%)"
+            total_all += total
+            scanned_all += sc
+
+        progress["TOTAL"] = f"{scanned_all}/{total_all} ({round((scanned_all/total_all)*100, 2) if total_all > 0 else 0}%)"
+
+        return {"progress": progress}
+    except Exception as e:
+        return {"error": str(e)}
+
+class CodeRequest(BaseModel):
+    prompt: str
+
+@app.post("/code_assist")
+def code_assist(req: CodeRequest):
+    """Kódolási segítség a VPS-en futó Qwen modelltől."""
+    import requests
+    OLLAMA_URL = "http://localhost:11434/api/generate"
+
+    payload = {
+        "model": "qwen2.5:1.5b",
+        "prompt": "Te egy Senior AI Kódoló Asszisztens vagy. Válaszolj az alábbi programozási kérdésre vagy írd meg a kódot.\nKérdés: " + req.prompt,
+        "stream": False
+    }
+
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=300)
+        return {"response": resp.json().get("response", "Nincs válasz a modelltől.")}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/health")
 def health_check():
     return {"status": "Alive", "system": "VPS Second Brain"}
