@@ -2,13 +2,11 @@ import sqlite3
 import os
 import time
 import uuid
-import sys
 
 def get_script_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 def chunk_text(text, max_length=1500):
-    """Szó alapú darabolás kb. max_length hosszúságú szövegekre (FastEmbed BGE 512 token limit)."""
     words = text.split()
     chunks = []
     current_chunk = []
@@ -55,9 +53,8 @@ def process_database(source_db_path, target_db_path, embedding_model):
 
     print(f"📦 Összesen {total_files} fájl (Code/Doc) vár vektorizálásra.", flush=True)
 
-    # BATCH processing az OOM elkerülésére (500 fájlonként)
-    # Tovább csökkentve 250-re a 8GB RAM stabilitása miatt
-    batch_size = 250
+    # Visszaálltunk az eredeti, agresszív 500-as Batch méretre a megnövelt SWAP miatt!
+    batch_size = 500
     offset = 0
     processed_chunks = 0
     start_time = time.time()
@@ -83,10 +80,9 @@ def process_database(source_db_path, target_db_path, embedding_model):
                 chunk_metadata.append((repo, filepath, chunk))
 
         if all_chunks:
-            # FastEmbed Batch generálás
+            # Multi-threaded embedding generálás (a 4 mag fogja a SWAP-ot is felhasználni ha kell)
             embeddings = list(embedding_model.embed(all_chunks))
 
-            # Mentés adatbázisba
             target_data = []
             for i in range(len(all_chunks)):
                 doc_id = str(uuid.uuid4())
@@ -111,10 +107,9 @@ def process_database(source_db_path, target_db_path, embedding_model):
 
 def main():
     print("=================================================================", flush=True)
-    print("🚀 UNIVERZÁLIS FASTEMBED RAG BUILDER V3 (OOM SAFE) 🚀", flush=True)
+    print("🚀 UNIVERZÁLIS FASTEMBED RAG BUILDER V3 (AGRESSZÍV 4-MAGOS MÓD, 40GB SWAP) 🚀", flush=True)
     print("=================================================================", flush=True)
 
-    # A HÁROM KÜLÖNÁLLÓ ADATBÁZIS! Nem egyesítjük őket, mindegyiknek saját target db-je van!
     DATABASES = [
         {
             "source": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
@@ -133,8 +128,8 @@ def main():
     print(f"[{time.strftime('%H:%M:%S')}] FastEmbed Modell betöltése a memóriába (BAAI/bge-small-en-v1.5) ...", flush=True)
     from fastembed import TextEmbedding
 
-    # Az előző futás 93% RAM-ot evett meg. Le kell vennünk a szálakat 2-re, hogy a VPS túlélje!
-    model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5", threads=2)
+    # Visszaálltunk a teljes 4 szálas feldolgozásra!
+    model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5", threads=4)
     print("✅ Modell betöltve.", flush=True)
 
     overall_start = time.time()
