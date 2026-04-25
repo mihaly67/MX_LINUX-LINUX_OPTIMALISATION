@@ -40,10 +40,54 @@ def main():
             sqlite_path = os.path.join(full_dir, db_file)
             break
 
+
     if not index_path or not sqlite_path:
-        print(f"❌ Error: Nem találtam érvényes RAG adatbázist a szokásos mappákban.")
-        print("💡 Próbáld meg lefuttatni a 'python3 tools/restore_env_pv.py' scriptet!")
+        print(f"⚠️ Lokális RAG adatbázis nem található. Váltás THIN CLIENT (VPS) módra...")
+        import requests
+        VPS_API = "http://localhost:8000/rag_search" # Az SSH bridge port forwarddal kellene, vagy publikus IP-n keresztül. Ideiglenesen a bridge api script is működik.
+
+        # Egyszerű megoldás a meglévő vps_bridge.py-on keresztül!
+        script_dir = get_script_dir()
+        bridge_path = os.path.join(script_dir, "..", "tools", "vps_bridge.py")
+
+        if os.path.exists(bridge_path):
+            import subprocess
+            print("🚀 Lekérdezés a VPS Második Agyától (vps_micro_server.py)...")
+            # A query escape-elése nagyon fontos a bash injection elkerülése végett
+            safe_query = args.query.replace("'", "'\''").replace('"', '\"')
+
+            # Megpróbáljuk beazonosítani, melyik adatbázisról van szó
+            db_target = "Gerilla_RAG"
+            if "mx_linux" in args.query.lower(): db_target = "mx_linux"
+            elif "chatbot" in args.query.lower() or "jules" in args.query.lower(): db_target = "CHATBOT"
+
+            curl_cmd = f"curl -s -G --data-urlencode 'query={safe_query}' --data-urlencode 'db_name={db_target}' --data-urlencode 'limit={args.limit}' http://localhost:8000/rag_search"
+
+            result = subprocess.run(["python3", bridge_path, curl_cmd], capture_output=True, text=True)
+
+            if result.returncode == 0 and "error" not in result.stdout:
+                try:
+                    import json
+                    data = json.loads(result.stdout)
+                    print("\n════════════════════════════════════════════════════════════════════════════════")
+                    print("🎯 RAG INTEL REPORT - VPS THIN CLIENT EDITION 🎯")
+                    print("════════════════════════════════════════════════════════════════════════════════\n")
+                    for idx, res in enumerate(data.get("results", [])):
+                        print(f"[{idx+1}] 📄 FÁJL: {res['file']}")
+                        print(f"    📦 REPO: {res['repo']}")
+                        print("-" * 80)
+                        print(f"{res['snippet']}")
+                        print("════════════════════════════════════════════════════════════════════════════════\n")
+                    sys.exit(0)
+                except Exception as e:
+                    print(f"JSON Parse hiba a VPS válaszából: {e}")
+                    print(result.stdout)
+            else:
+                print(f"❌ VPS Bridge Hiba: {result.stderr}")
+        else:
+            print("❌ Nincs lokális adatbázis és a vps_bridge.py sem található. Kilépés.")
         sys.exit(1)
+
 
     model_name = "all-MiniLM-L6-v2"
     print(f"🧠 Modell betöltése ({model_name})...")

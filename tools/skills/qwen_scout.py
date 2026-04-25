@@ -5,7 +5,13 @@ import os
 import requests
 import time
 
-DB_PATH = os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db")
+# Dinamikus RAG váltó
+DB_PATHS = [
+    os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db"),
+    os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
+    os.path.expanduser("~/MX_LINUX_RAG/mx_linux_knowledge.db")
+]
+
 OLLAMA_URL = "http://localhost:11434/api/generate"
 ALERTS_DIR = os.path.expanduser("~/Jules_mx/alerts")
 SCANNED_DB = os.path.expanduser("~/Jules_mx/temp/scanned_files.db")
@@ -49,33 +55,55 @@ def ask_qwen(prompt):
         return f"Error: {e}"
 
 def scout_loop():
-    print("🤖 Qwen Scout elindult... (Folyamatos háttérkutatás felgyorsítva és OKOSÍTVA!)")
+    print("🤖 Qwen Scout elindult... (Multi-RAG Dinamikus Váltással!)")
     init_scanned_db()
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    while True:
+        # Végigmegyünk az adatbázisokon
+        all_dbs_done = True
 
-    # Csak izgalmas kiterjesztések
-    cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm'")
-    files = cursor.fetchall()
+        for db_path in DB_PATHS:
+            if not os.path.exists(db_path):
+                print(f"⚠️ Nem található adatbázis: {db_path}")
+                continue
 
-    # Kiszűrjük, amit már láttunk memóriában
-    unscanned_files = [f for f in files if not is_scanned(f[0])]
-    print(f"Összes fájl: {len(files)}, Ebből még nem vizsgált: {len(unscanned_files)}")
+            print(f"\n📂 RAG Adatbázis elemzése: {db_path}")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
 
-    while unscanned_files:
-        filepath, content = random.choice(unscanned_files)
-        unscanned_files.remove((filepath, content))
+            try:
+                cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm'")
+                files = cursor.fetchall()
+            except sqlite3.Error:
+                print(f"❌ Sémahiba a(z) {db_path} adatbázisban.")
+                conn.close()
+                continue
 
-        # Rögtön be is jelöljük, hogy OOM esetén se kezdjük elölről
-        mark_scanned(filepath)
+            conn.close()
 
-        # OOM és token limit védelem
-        if not content or len(content) < 50 or len(content) > 3000:
-            continue
+            unscanned_files = [f for f in files if not is_scanned(f[0])]
 
-        print(f"🔍 Elemzem: {filepath} ...")
-        prompt = f"""You are a cybersecurity, AI architecture and Python expert assistant.
+            if not unscanned_files:
+                print(f"✅ Adatbázis feldolgozva: {db_path}")
+                continue
+
+            all_dbs_done = False
+            print(f"Összes fájl: {len(files)}, Ebből még nem vizsgált: {len(unscanned_files)}")
+
+            # Csináljunk meg egy adatbázisból 500 fájlt, majd lépjünk a következőre, hogy ne ragadjunk le egy helyen (Round Robin)
+            batch_count = 0
+            while unscanned_files and batch_count < 500:
+                filepath, content = random.choice(unscanned_files)
+                unscanned_files.remove((filepath, content))
+                batch_count += 1
+
+                mark_scanned(filepath)
+
+                if not content or len(content) < 50 or len(content) > 3000:
+                    continue
+
+                print(f"🔍 Elemzem: {filepath} ...")
+                prompt = f"""You are a cybersecurity, AI architecture and Python expert assistant.
 Review the following code file named '{filepath}'.
 Is this code useful for an AI agent infrastructure (e.g., automation, process management, API wrapping, code generation, testing automation, stealth operation)?
 Answer with a short summary of what it does, and start your answer with 'YES:' if it is highly relevant and useful, or 'NO:' if it is just a standard/boring file.
@@ -83,20 +111,22 @@ Answer with a short summary of what it does, and start your answer with 'YES:' i
 CODE:
 {content}
 """
-        response = ask_qwen(prompt)
+                response = ask_qwen(prompt)
 
-        if response.startswith("YES:"):
-            print("🚨 ÉRDEKES LELET! Mentés a postaládába...")
-            alert = {
-                "timestamp": time.time(),
-                "file": filepath,
-                "qwen_analysis": response
-            }
-            safe_name = filepath.replace("/", "_").replace("\\\\", "_")
-            with open(os.path.join(ALERTS_DIR, f"{safe_name}.json"), "w") as f:
-                json.dump(alert, f)
+                if response.startswith("YES:"):
+                    print("🚨 ÉRDEKES LELET! Mentés a postaládába...")
+                    alert = {
+                        "timestamp": time.time(),
+                        "file": filepath,
+                        "qwen_analysis": response
+                    }
+                    safe_name = filepath.replace("/", "_").replace("\\", "_")
+                    with open(os.path.join(ALERTS_DIR, f"{safe_name}.json"), "w") as f:
+                        json.dump(alert, f)
 
-    print("🏁 Minden fájlt átvizsgáltunk a célcsoportból!")
+        if all_dbs_done:
+            print("🏁 Minden adatbázis minden kódját feldolgoztam! Várakozás új RAG frissítésre...")
+            time.sleep(3600) # 1 órát alszik, hátha jön új fájl
 
 if __name__ == "__main__":
     scout_loop()
