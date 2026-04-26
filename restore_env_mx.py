@@ -174,29 +174,16 @@ def main():
     key_path = os.path.join(secrets_dir, "jules_vps_key")
 
     if not os.path.exists(key_path):
-        import subprocess as sp
-        print(f"   ⚙️ SSH kulcs generálása...")
-        sp.run(["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q"])
-
-        # Jelszó biztonságos beolvasása környezeti változóból!
-        vps_pwd = os.environ.get("VPS_PWD")
-        if vps_pwd:
-            try:
-                import paramiko
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(hostname="5.189.163.88", port=22, username="misi", password=vps_pwd, timeout=10)
-
-                with open(key_path + ".pub", "r") as pub_f:
-                    pub_key = pub_f.read().strip()
-
-                client.exec_command(f"echo '{pub_key}' >> ~/.ssh/authorized_keys")
-                client.close()
-                print(f"{Fore.GREEN}   ✅ SSH kulcsok legenerálva és sikeresen regisztrálva a VPS-en.{Style.RESET_ALL}")
-            except Exception as e:
-                print(f"{Fore.RED}   ❌ Hiba a kulcs VPS-re másolásakor: {e}{Style.RESET_ALL}")
+        # A környezeti változóból próbáljuk beolvasni a privát kulcsot
+        vps_ssh_key = os.environ.get("VPS_SSH_KEY")
+        if vps_ssh_key:
+            print(f"   ⚙️ SSH kulcs importálása a környezeti változóból...")
+            with open(key_path, "w") as f:
+                f.write(vps_ssh_key.replace("\\n", "\n"))
+            os.chmod(key_path, 0o600)
+            print(f"{Fore.GREEN}   ✅ SSH kulcs importálva és beállítva.{Style.RESET_ALL}")
         else:
-            print(f"{Fore.YELLOW}   ⚠️ SSH kulcsok legenerálva, de a VPS-re nem lettek felmásolva, mert nincs megadva VPS_PWD környezeti változó.{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}   ⚠️ SSH kulcs hiányzik. Kérjük állítsd be a VPS_SSH_KEY környezeti változót!{Style.RESET_ALL}")
     else:
         print(f"{Fore.GREEN}   ✅ SSH kulcsok már léteznek.{Style.RESET_ALL}")
 
