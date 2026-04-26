@@ -54,7 +54,7 @@ def main():
             import subprocess
             print("🚀 Lekérdezés a VPS Második Agyától (vps_micro_server.py)...")
             # A query escape-elése nagyon fontos a bash injection elkerülése végett
-            safe_query = args.query.replace("'", "'\''").replace('"', '\"')
+            safe_query = args.query.replace("'", "'\\''").replace('"', '\\"')
 
             # Megpróbáljuk beazonosítani, melyik adatbázisról van szó
             db_target = "Gerilla_RAG"
