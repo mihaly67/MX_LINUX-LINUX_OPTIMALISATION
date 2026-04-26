@@ -46,9 +46,9 @@ def mark_scanned(filepath):
     conn.commit()
     conn.close()
 
-def ask_qwen(prompt):
+def ask_llama3(prompt):
     payload = {
-        "model": "qwen2.5:1.5b",
+        "model": "llama3",
         "prompt": prompt,
         "stream": False
     }
@@ -59,7 +59,7 @@ def ask_qwen(prompt):
         return f"Error: {e}"
 
 def scout_loop():
-    print("🤖 Qwen Scout elindult... (Multi-RAG Dinamikus Váltással, Maximális Erőforrással!)")
+    print("🤖 Llama3 Scout elindult... (Multi-RAG Dinamikus Váltással, Maximális Erőforrással!)")
     init_scanned_db()
 
     while True:
@@ -115,7 +115,7 @@ Answer with a short summary of what it does, and start your answer with 'YES:' i
 CODE:
 {content}
 """
-                response = ask_qwen(prompt)
+                response = ask_llama3(prompt)
 
                 if response.startswith("YES:"):
                     print(f"🚨 ÉRDEKES LELET a {rag_name} adatbázisban! Mentés a dedikált mappába...")
@@ -123,7 +123,7 @@ CODE:
                         "timestamp": time.time(),
                         "rag_source": rag_name,
                         "file": filepath,
-                        "qwen_analysis": response
+                        "llama3_analysis": response
                     }
                     safe_name = filepath.replace("/", "_").replace("\\", "_")
 
