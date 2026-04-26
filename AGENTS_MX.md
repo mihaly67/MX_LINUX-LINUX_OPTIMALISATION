@@ -27,7 +27,7 @@ Eszközök, amiket a `tools/skills/` és a VPS bridge ad neked:
   `python3 tools/skills/vps_coder.py --prompt "Hogyan csináljak XYZ-t?"`
 
 * **Qwen Scout és VPS Agent Manager:**
-  A VPS-en folyamatosan fut a `qwen_scout.py`, amely elemzi a RAG repókat (duplikáció nélkül, saját SQLite memóriával). A találatait a `vps_agent_manager.py` (Mester) feldolgozza, és képes új, Google által hostolt Agent (Szolga) Session-öket elindítani a `jules` CLI paranccsal a felfedezett problémák megoldására.
+  A VPS-en folyamatosan fut a `llama3_scout.py`, amely elemzi a RAG repókat (duplikáció nélkül, saját SQLite memóriával). A találatait a `vps_agent_manager.py` (Mester) feldolgozza, és képes új, Google által hostolt Agent (Szolga) Session-öket elindítani a `jules` CLI paranccsal a felfedezett problémák megoldására.
 
 * **Haladás lekérdezése:**
   `python3 tools/skills/vps_coder.py --progress`
