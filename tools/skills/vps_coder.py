@@ -14,8 +14,10 @@ def ask_vps_coder(prompt):
     print("🧠 VPS Qwen (Kódoló Asszisztens) gondolkodik...")
 
     # A curl parancs, amit elküldünk a VPS-re
-    escaped_prompt = prompt.replace("'", "'\\''").replace('"', '\\"')
-    command = f"curl -s -X POST -H 'Content-Type: application/json' -d '{{\"prompt\": \"{escaped_prompt}\"}}' {VPS_API_URL}/code_assist"
+    import json
+    json_data = json.dumps({"prompt": prompt})
+    escaped_json_data = json_data.replace("'", "'\\''")
+    command = f"curl -s -X POST -H 'Content-Type: application/json' -d '{escaped_json_data}' {VPS_API_URL}/code_assist"
 
     success, out = vps_bridge.run_on_vps(command)
     if success:
