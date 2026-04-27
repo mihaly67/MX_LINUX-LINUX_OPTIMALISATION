@@ -14,8 +14,8 @@ SYNC_INTERVAL = 300 # 5 perc
 def extract_and_print_progress(report_content):
     """Kiolvassa a markdownból a %-os állásokat és kiírja színesen a konzolra."""
     print(colored("\n📈 Jelenlegi RAG Feldolgozottság:", "magenta", attrs=["bold"]))
-    # Regex keresés a statisztikákra a markdown szövegből
-    pattern = r"- \*\*([^*]+)\*\*: (\d+) / (\d+) fájl feldolgozva\n\s*`\|([^|]+)\| ([\d.]+)%`"
+    # Továbbfejlesztett regex, mert a markdown generáló frissítve lett a VPS-en
+    pattern = r"- \*\*([^*]+)\*\*: (\d+) / (\d+) fájl feldolgozva"
     matches = re.findall(pattern, report_content)
 
     if not matches:
@@ -23,7 +23,13 @@ def extract_and_print_progress(report_content):
         return
 
     for match in matches:
-        rag_name, scanned, total, bar, percent_str = match
+        rag_name, scanned, total = match
+        percent = (int(scanned) / int(total)) * 100 if int(total) > 0 else 0
+        percent_str = f"{percent:.1f}"
+
+        filled = int(30 * percent / 100)
+        bar = "█" * filled + "░" * (30 - filled)
+
         print(f"  {colored(rag_name.ljust(10), 'cyan')} |{bar}| {colored(percent_str + '%', 'yellow', attrs=['bold'])} ({scanned}/{total})")
     print()
 
