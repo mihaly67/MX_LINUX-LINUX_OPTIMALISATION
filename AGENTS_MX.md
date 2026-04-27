@@ -5,14 +5,15 @@ Ez a dokumentum az Agent projektjeink (és minden újabb repo, amihez hozzáfér
 ---
 
 ## 1. ELSŐ LÉPÉS MINDEN ÚJ SESSION-NÉL ÉS ÚJ REPÓBAN
-**Kérdés nélkül futtasd ezt a parancsot:**
+**Kérdés nélkül futtasd ezt a parancsot (a session indulás gördülékeny lesz):**
 ```bash
+export VPS_SSH_KEY="<itt add meg a privát kulcsot környezeti változóban, vagy a sandbox már eleve biztosítja>"
 python3 restore_env_mx.py
 ```
 **Ez a script a következőt teszi automatikusan:**
 1. Letölti és beállítja a szükséges Python függőségeket és RAG adatbázisokat a lokális Sandboxban.
 2. Elindítja a lokális Keep-Alive daemont, ami megakadályozza a konténer fagyását.
-3. Beállítja a nyílt SSH hitelesítést a VPS felé.
+3. A környezeti változóból (`VPS_SSH_KEY`) beolvasott privát kulccsal automatikusan inicializálja a jelszómentes SSH hitelesítést a VPS felé.
 4. **Felébreszti a Kontextus Titkárt (Context Secretary)** a VPS-en, ami a `qwen2.5:1.5b` LLM-et használva 150 tokenes magyar nyelvű összefoglalót ad az eddigi munkáról.
 
 ---
