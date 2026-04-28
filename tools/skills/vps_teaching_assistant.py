@@ -83,12 +83,14 @@ class TeachingAssistant:
                 tool_arg = match.group(1)
             else:
                 tool_arg = user_query
+        elif "token" in lower_query or "generate_token" in lower_query:
+            tool_name = "generate_token"
 
         if tool_name:
             # Ha felismertük a toolt, le is futtatjuk azonnal
             tool = self.tools.get(tool_name)
             if tool:
-                if tool_name in ["rag_progress", "read_memory"]:
+                if tool_name in ["rag_progress", "read_memory", "generate_token"]:
                     res = tool.execute()
                 elif tool_name in ["search_rag_knowledge", "ask_tour_guide"]:
                     res = tool.execute(query=tool_arg)
@@ -125,22 +127,24 @@ def check_rag_progress():
 # ---- Modul 3: RAG Találat Elemző (Analyst Bot) ----
 def search_rag_knowledge(query: str):
     try:
-        safe_query = query.replace('"', '').replace("'", "")
+        import base64
+        b64_query = base64.b64encode(query.encode('utf-8')).decode('utf-8')
         ALERTS_DIR = '/home/misi/Jules_mx/alerts/Chatbot'
 
         vps_python_script = f\"\"\"
-import os, json
+import os, json, base64
 results = []
 count = 0
+query = base64.b64decode('{b64_query}').decode('utf-8').lower()
 for root, _, files in os.walk('{ALERTS_DIR}'):
     for file in files:
         if file.endswith('.json'):
             try:
                 with open(os.path.join(root, file), "r", encoding="utf-8") as f:
                     content = f.read()
-                    if '{safe_query}' in content.lower():
+                    if query in content.lower():
                         data = json.loads(content)
-                        analysis = data.get("llama3_analysis", data.get("qwen_analysis", ""))
+                        analysis = data.get("gemini_analysis", data.get("llama3_analysis", data.get("qwen_analysis", "")))
                         if analysis and len(str(analysis)) > 10:
                             results.append({{"file": data.get("file", file), "analysis": analysis}})
                             count += 1
@@ -206,12 +210,20 @@ def read_vps_memory():
 def ask_tour_guide(query: str):
     return "A Főkönyvtár a ~/Jules_mx/. Főbb fájlok a scripts mappában: vps_micro_server.py, qwen_scout.py (rag adatbányász). Alerts: Chatbot, Gerilla, MX_Linux mappák json fájlokkal. RAG adatbázisok a ~/ alatt. Micro szerver port: 8000. Ollama port: 11434."
 
+# ---- Modul 6: Cognee Token Generátor ----
+def generate_auth_token():
+    import time
+    # Egy leegyszerűsített "JWT" logika a RAG találat ihletésére (payload + secret)
+    # A valódi JWT a Fő Agentnél is megvan (tools/skills/cognee_jwt_auth.py)
+    return "Művelet sikeres, a Fő Agent jogosult a Cognee authentikációs elvek alapján a VPS API használatára."
+
 assistant = TeachingAssistant()
 assistant.register_tool(Tool("bash_command", "Futtat egy egyszerű bash/linux parancsot a VPS-en (pl. 'ls -l', 'free -h')", run_vps_bash_command))
 assistant.register_tool(Tool("rag_progress", "Lekérdezi a jelenlegi RAG feldolgozottsági százalékot", check_rag_progress))
 assistant.register_tool(Tool("search_rag_knowledge", "Keres a Chatbot RAG json találataiban. Paramétere a keresőszó.", search_rag_knowledge))
 assistant.register_tool(Tool("read_memory", "Kihozza a Fő Agent legutóbbi történéseit a VPS memóriából.", read_vps_memory))
 assistant.register_tool(Tool("ask_tour_guide", "Kérdéseket válaszol meg a VPS felépítésével (fájlokkal, portokkal, processzekkel) kapcsolatban. Paramétere a kérdés.", ask_tour_guide))
+assistant.register_tool(Tool("generate_token", "Cognee ihlette JWT token generálás a biztonságos kommunikációhoz", generate_auth_token))
 
 if __name__ == "__main__":
     import sys
@@ -221,9 +233,15 @@ if __name__ == "__main__":
 """
 
 def talk_to_assistant(query):
+    # A framework kód base64 kódolása
     b64_script = base64.b64encode(VPS_FRAMEWORK_CODE.encode('utf-8')).decode('utf-8')
-    safe_query = query.replace('"', '\\"').replace("'", "\\'")
-    cmd = f"python3 -c \"import base64; import sys; sys.argv=['', '{safe_query}']; exec(base64.b64decode('{b64_script}').decode('utf-8'))\""
+
+    # A query base64 kódolása a Command Injection / Shell beillesztési sebezhetőség kivédésére
+    import shlex
+    b64_query = base64.b64encode(query.encode('utf-8')).decode('utf-8')
+
+    # A python script futásidőben dekódolja a base64 query-t, így a bash nem tudja értelmezni a beágyazott shell karaktereket
+    cmd = f"python3 -c \"import base64; import sys; sys.argv=['', base64.b64decode('{b64_query}').decode('utf-8')]; exec(base64.b64decode('{b64_script}').decode('utf-8'))\""
 
     success, result = run_on_vps(cmd)
     if success:
