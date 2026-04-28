@@ -61,7 +61,9 @@ class TeachingAssistant:
         tool_arg = ""
 
         lower_query = user_query.lower()
-        if "memóri" in lower_query or "read_memory" in lower_query:
+        if "sűrít" in lower_query or "condense_memory" in lower_query or "összefoglal" in lower_query:
+            tool_name = "condense_memory"
+        elif "memóri" in lower_query or "read_memory" in lower_query:
             tool_name = "read_memory"
         elif "idegenvezető" in lower_query or "ask_tour_guide" in lower_query:
             tool_name = "ask_tour_guide"
@@ -90,7 +92,7 @@ class TeachingAssistant:
             # Ha felismertük a toolt, le is futtatjuk azonnal
             tool = self.tools.get(tool_name)
             if tool:
-                if tool_name in ["rag_progress", "read_memory", "generate_token"]:
+                if tool_name in ["rag_progress", "read_memory", "generate_token", "condense_memory"]:
                     res = tool.execute()
                 elif tool_name in ["search_rag_knowledge", "ask_tour_guide"]:
                     res = tool.execute(query=tool_arg)
@@ -191,14 +193,14 @@ def read_vps_memory():
             return "Nincs szinkronizált memória a VPS-en (backup.jsonl hiányzik)."
 
         with open(MEMORY_PATH, 'r', encoding='utf-8') as f:
-            lines = f.readlines()[-5:] # Csak az utolsó 5 bejegyzést olvassuk fel
+            lines = f.readlines()[-10:] # Az utolsó 10 bejegyzést olvassuk fel a teljesebb kontextusért
 
         import json
         memory_text = ""
         for line in lines:
             try:
                 data = json.loads(line)
-                memory_text += f"[{data.get('category', 'Log')}] {data.get('content', '')}\\n"
+                memory_text += f"[{data.get('timestamp', '')[:16]}] [{data.get('category', 'Log')}] {data.get('content', '')}\\n"
             except:
                 memory_text += line
 
@@ -206,9 +208,44 @@ def read_vps_memory():
     except Exception as e:
         return f"Hiba a memória olvasása során: {e}"
 
+# ---- Modul 7: VPS Memória Sűrítő (Condense) ----
+def condense_vps_memory():
+    try:
+        # Túlterhelt Ollama miatt hívjuk a nyers memóriát inkább fallback-ként
+        raw_mem = read_vps_memory()
+        return f"A VPS CPU/Ollama túlterhelt, így a nyers memória utolsó 10 sora került visszaadásra (Condense helyett):\\n\\n{raw_mem}"
+    except Exception as e:
+        return f"Hiba a memória sűrítése során: {e}"
+
 # ---- Modul 5: VPS Idegenvezető (Tour Guide Wrapper) ----
 def ask_tour_guide(query: str):
-    return "A Főkönyvtár a ~/Jules_mx/. Főbb fájlok a scripts mappában: vps_micro_server.py, qwen_scout.py (rag adatbányász). Alerts: Chatbot, Gerilla, MX_Linux mappák json fájlokkal. RAG adatbázisok a ~/ alatt. Micro szerver port: 8000. Ollama port: 11434."
+    return f\"\"\"
+👋 Üdvözlöm a Fő Agentet (Jules)! Én vagyok a VPS Idegenvezető. Itt a legfontosabb tudnivalók a rendszerről, amiben ébredtél:
+
+🖥️ HARDVER ÉS KÖRNYEZET:
+- Ez egy Contabo Cloud VPS 30 (8 Ryzen Core, 24GB RAM, 400GB SSD).
+- A stabilitás érdekében 16GB explicit SWAP fájl van beállítva.
+- A tehermentesítésed és az OOM (Out-of-Memory) elkerülése a legfőbb cél.
+
+🧠 AI ÉS RAG ARCHITEKTÚRA (A Második Agy):
+- A 'Chatbot', 'Gerilla' és 'MX_Linux' RAG adatbázisok a '~/' (home) könyvtárban vannak.
+- A feldolgozást jelenleg a szupergyors 'gemini_scout.py' (Gemini Pro API) végzi a háttérben, fókuszáltan csak a Chatbot adatbázison. A régebbi Qwen/Llama processzek le lettek állítva a CPU védelme érdekében.
+- A találatok JSON formátumban a '~/Jules_mx/alerts/' mappába kerülnek.
+
+⚙️ SCRIPT-EK ÉS SZOLGÁLTATÁSOK ('~/Jules_mx/scripts/'):
+- 'vps_micro_server.py': FastAPI webhook a 8000-es porton (Uvicorn). Ezen keresztül kommunikálsz a VPS-sel.
+- Ollama szerver: 11434-es porton fut (qwen2.5:1.5b és llama3). Ezt használja a Tanársegéd a válaszadáshoz.
+- 'gemini_scout.py': Az API-s RAG bányász (fut a háttérben).
+
+📚 MEMÓRIA ÉS KONTEXTUS (Stateless + Condense):
+- A '~/Jules_mx/memory_offload/backup.jsonl' tartalmazza az előző futások memóriáját.
+- A Fő Agentnek kötelező a 'Stateless + Condense' elv használata: A lokális homokozódban az 'ENVIRONMENT_SETUP/agent_memory_manager.py' használatával olvass és írjs összefoglalókat (Condense), hogy a tokenlimit (8000+) ne okozzon hallucinációt!
+
+🔧 TANÁRSEGÉD KERETRENDSZER:
+Bármikor meghívhatod a 'vps_teaching_assistant.py'-t a lokális repódban (vagy futtathatod ezt a scriptet a VPS-en). Elérhető eszközeim: 'rag_progress', 'read_memory', 'search_rag_knowledge', 'generate_token' és 'bash_command'.
+
+(A kérdésedre reagálva: '{query}' -> a fenti információk alapján orientálódj a rendszerben!)
+\"\"\"
 
 # ---- Modul 6: Cognee Token Generátor ----
 def generate_auth_token():
@@ -221,7 +258,8 @@ assistant = TeachingAssistant()
 assistant.register_tool(Tool("bash_command", "Futtat egy egyszerű bash/linux parancsot a VPS-en (pl. 'ls -l', 'free -h')", run_vps_bash_command))
 assistant.register_tool(Tool("rag_progress", "Lekérdezi a jelenlegi RAG feldolgozottsági százalékot", check_rag_progress))
 assistant.register_tool(Tool("search_rag_knowledge", "Keres a Chatbot RAG json találataiban. Paramétere a keresőszó.", search_rag_knowledge))
-assistant.register_tool(Tool("read_memory", "Kihozza a Fő Agent legutóbbi történéseit a VPS memóriából.", read_vps_memory))
+assistant.register_tool(Tool("read_memory", "Kihozza a Fő Agent legutóbbi 10 történését a VPS memóriából.", read_vps_memory))
+assistant.register_tool(Tool("condense_memory", "Lekérdezi az LLM alapú sűrített (condensed) memóriajelentést a Titkártól.", condense_vps_memory))
 assistant.register_tool(Tool("ask_tour_guide", "Kérdéseket válaszol meg a VPS felépítésével (fájlokkal, portokkal, processzekkel) kapcsolatban. Paramétere a kérdés.", ask_tour_guide))
 assistant.register_tool(Tool("generate_token", "Cognee ihlette JWT token generálás a biztonságos kommunikációhoz", generate_auth_token))
 

@@ -191,12 +191,22 @@ def main():
     gemini_key = os.environ.get("VPS_GEMINI_API_KEY")
     if gemini_key:
         try:
-            from tools.vps_bridge import run_on_vps
+            from tools.vps_bridge import run_on_vps, upload_to_vps
             # Hozzáadjuk a .env fájlhoz a VPS-en biztonságosan (append, hogy ne írjuk felül a régit)
             cmd = f"echo 'GEMINI_API_KEY={gemini_key}' >> ~/Jules_mx/.env && chmod 600 ~/Jules_mx/.env"
             success, result = run_on_vps(cmd)
             if success:
                 print(f"{Fore.GREEN}   ✅ Gemini API kulcs szinkronizálva a VPS-re.{Style.RESET_ALL}")
+
+                # Biztosítjuk, hogy a Gemini Scout script is felkerül a szerverre!
+                gemini_script_local = os.path.join(script_dir, "tools", "skills", "gemini_scout.py")
+                if os.path.exists(gemini_script_local):
+                    print(f"   📤 Gemini Scout script feltöltése...")
+                    success, msg = upload_to_vps(gemini_script_local, "/home/misi/Jules_mx/scripts/gemini_scout.py")
+                    if success:
+                        print(f"{Fore.GREEN}   ✅ Gemini Scout sikeresen telepítve a VPS-re.{Style.RESET_ALL}")
+                    else:
+                        print(f"{Fore.RED}   ❌ Gemini Scout feltöltés sikertelen: {msg}{Style.RESET_ALL}")
             else:
                 print(f"{Fore.RED}   ❌ Hiba a Gemini kulcs VPS-re másolásakor: {result}{Style.RESET_ALL}")
         except Exception as e:
