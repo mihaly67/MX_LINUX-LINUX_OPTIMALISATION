@@ -43,57 +43,63 @@ class TeachingAssistant:
 
     def call_llm(self, prompt: str) -> str:
         url = "http://localhost:11434/api/generate"
-        # A timeout és az extrém terhelés elkerülése végett Qwen2.5 1.5B a backend agent.
-        data = json.dumps({"model": "qwen2.5:1.5b", "prompt": prompt, "stream": False, "options": {"num_predict": 250}}).encode("utf-8")
+        # A timeout és az extrém terhelés elkerülése végett Qwen2.5 1.5B a backend agent, nagyon alacsony predict limittel
+        data = json.dumps({"model": "qwen2.5:1.5b", "prompt": prompt, "stream": False, "options": {"num_predict": 50}}).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
         try:
-            with urllib.request.urlopen(req, timeout=300) as response:
+            with urllib.request.urlopen(req, timeout=240) as response:
                 result = json.loads(response.read().decode('utf-8'))
                 return result.get("response", "Nincs válasz.")
         except Exception as e:
             return f"Hiba az LLM hívásakor: {e}"
 
     def process_query(self, user_query: str) -> str:
-        tools_desc = "\\n".join([f"- {name}: {t.description}" for name, t in self.tools.items()])
+        # Ahelyett, hogy LLM-et hívnánk egy Tool felismerésére, egy egyszerű regex alapú szándékfelismerést végzünk,
+        # ami azonnali 0.1 mp alatt lefut, megkerülve a VPS Ollama Timeout-ot.
+        import re
+        tool_name = None
+        tool_arg = ""
 
-        system_prompt = f\"\"\"
-Te egy Tanársegéd Agent vagy. A rendelkezésedre álló eszközök:
-{tools_desc}
+        lower_query = user_query.lower()
+        if "memóri" in lower_query or "read_memory" in lower_query:
+            tool_name = "read_memory"
+        elif "idegenvezető" in lower_query or "ask_tour_guide" in lower_query:
+            tool_name = "ask_tour_guide"
+            tool_arg = user_query
+        elif "százalék" in lower_query or "rag_progress" in lower_query:
+            tool_name = "rag_progress"
+        elif "keresd" in lower_query or "search_rag" in lower_query or "talált" in lower_query:
+            tool_name = "search_rag_knowledge"
+            # Extraháljuk a keresőszót az aposztrófok közül
+            match = re.search(r"'([^']+)'", user_query)
+            if match:
+                tool_arg = match.group(1)
+            else:
+                tool_arg = user_query
+        elif "bash" in lower_query or "parancs" in lower_query or "futtasd" in lower_query:
+            tool_name = "bash_command"
+            match = re.search(r"'([^']+)'", user_query)
+            if match:
+                tool_arg = match.group(1)
+            else:
+                tool_arg = user_query
 
-A Fő Agent (Jules) kérdése: {user_query}
-
-FONTOS SZABÁLY: Ha a fenti eszközök valamelyikére van szükséged a pontos válaszhoz (például RAG százalék, memória, fájlrendszer), NE tippelj, hanem használd a Toolt! ÍRD LE EZZEL A FORMÁTUMMAL A GENERÁLÁSBAN:
-EXECUTE_TOOL: pontos_eszkoz_neve | ARG: parameterek_ide
-
-Például:
-EXECUTE_TOOL: rag_progress | ARG: none
-\"\"\"
-        llm_response = self.call_llm(system_prompt)
-
-        tool_match = re.search(r"EXECUTE_TOOL:\\s*([\\w_]+)(?:\\s*\\|\\s*ARG:\\s*(.*))?", llm_response)
-
-        if tool_match:
-            tool_name = tool_match.group(1)
-            tool_arg = tool_match.group(2).strip() if tool_match.group(2) else ""
-
-            if tool_name in self.tools:
-                tool = self.tools[tool_name]
-                if tool_name == "rag_progress":
+        if tool_name:
+            # Ha felismertük a toolt, le is futtatjuk azonnal
+            tool = self.tools.get(tool_name)
+            if tool:
+                if tool_name in ["rag_progress", "read_memory"]:
                     res = tool.execute()
-                elif tool_name == "search_rag_knowledge":
+                elif tool_name in ["search_rag_knowledge", "ask_tour_guide"]:
                     res = tool.execute(query=tool_arg)
-                elif tool_arg:
-                    res = tool.execute(cmd=tool_arg)
                 else:
-                    res = tool.execute()
-
-                # Mivel az LLM timeoutol az ismételt hívásnál a terhelt rendszeren,
-                # egyenesen visszaadjuk a formázott tool eredményt LLM szintézis nélkül
+                    res = tool.execute(cmd=tool_arg)
                 return f"Eszköz ('{tool_name}') nyers eredménye:\\n\\n{res.content}"
             else:
-                return f"{llm_response}\\n\\n(Hiba: A '{tool_name}' eszköz nem létezik.)"
+                return f"A '{tool_name}' eszköz nem létezik a regiszterben."
 
-        return llm_response
+        # Ha nincs tool match, akkor hívjuk be fallbackként a gyors LLM-et válaszolni
+        return self.call_llm(f"Rövid válasz az alábbi kérdésre: {user_query}")
 
 # ---- Modul 1: Bash Exec ----
 def run_vps_bash_command(cmd: str):
@@ -172,10 +178,40 @@ print(json.dumps(results[:2]))
     except Exception as e:
         return f"Hiba a RAG keresés során: {e}"
 
+# ---- Modul 4: VPS Memória Olvasó (Context Secretary Hívó) ----
+def read_vps_memory():
+    try:
+        import os
+        MEMORY_PATH = os.path.expanduser("~/Jules_mx/memory_offload/backup.jsonl")
+        if not os.path.exists(MEMORY_PATH):
+            return "Nincs szinkronizált memória a VPS-en (backup.jsonl hiányzik)."
+
+        with open(MEMORY_PATH, 'r', encoding='utf-8') as f:
+            lines = f.readlines()[-5:] # Csak az utolsó 5 bejegyzést olvassuk fel
+
+        import json
+        memory_text = ""
+        for line in lines:
+            try:
+                data = json.loads(line)
+                memory_text += f"[{data.get('category', 'Log')}] {data.get('content', '')}\\n"
+            except:
+                memory_text += line
+
+        return memory_text
+    except Exception as e:
+        return f"Hiba a memória olvasása során: {e}"
+
+# ---- Modul 5: VPS Idegenvezető (Tour Guide Wrapper) ----
+def ask_tour_guide(query: str):
+    return "A Főkönyvtár a ~/Jules_mx/. Főbb fájlok a scripts mappában: vps_micro_server.py, qwen_scout.py (rag adatbányász). Alerts: Chatbot, Gerilla, MX_Linux mappák json fájlokkal. RAG adatbázisok a ~/ alatt. Micro szerver port: 8000. Ollama port: 11434."
+
 assistant = TeachingAssistant()
 assistant.register_tool(Tool("bash_command", "Futtat egy egyszerű bash/linux parancsot a VPS-en (pl. 'ls -l', 'free -h')", run_vps_bash_command))
 assistant.register_tool(Tool("rag_progress", "Lekérdezi a jelenlegi RAG feldolgozottsági százalékot", check_rag_progress))
 assistant.register_tool(Tool("search_rag_knowledge", "Keres a Chatbot RAG json találataiban. Paramétere a keresőszó.", search_rag_knowledge))
+assistant.register_tool(Tool("read_memory", "Kihozza a Fő Agent legutóbbi történéseit a VPS memóriából.", read_vps_memory))
+assistant.register_tool(Tool("ask_tour_guide", "Kérdéseket válaszol meg a VPS felépítésével (fájlokkal, portokkal, processzekkel) kapcsolatban. Paramétere a kérdés.", ask_tour_guide))
 
 if __name__ == "__main__":
     import sys
