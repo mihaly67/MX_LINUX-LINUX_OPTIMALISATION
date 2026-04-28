@@ -29,10 +29,15 @@ def write_memory(category: str, content: str):
         "content": content
     }
 
-    with open(MEMORY_FILE, 'a', encoding='utf-8') as f:
-        f.write(json.dumps(entry) + "\n")
-
-    print(f"🧠 Memória elmentve a lemezre! Kategória: {category}")
+    # Atomi írás szimulálása: megpróbáljuk fájl zárolással vagy gyors append-el
+    try:
+        with open(MEMORY_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + "\n")
+            f.flush()
+            os.fsync(f.fileno()) # Biztosítjuk, hogy fizikailag is a lemezre kerüljön az OS bufferből
+        print(f"🧠 Memória elmentve a lemezre (fsync biztosítva)! Kategória: {category}")
+    except Exception as e:
+        print(f"❌ Kritikus hiba a memória mentésekor: {e}")
 
 def mark_session(event: str):
     """Bejegyez egy [SESSION_START] vagy [SESSION_END] markert."""

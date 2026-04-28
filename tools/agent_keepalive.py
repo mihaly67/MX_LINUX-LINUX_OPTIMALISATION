@@ -26,8 +26,8 @@ def run_daemon():
     print(f"💓 [Supervisor Daemon] Elindult. Folyamatos szívverés generálása: {keepalive_file}", flush=True)
     print(f"🧠 [Supervisor Daemon] Memória figyelve: {memory_file}", flush=True)
 
-    try:
-        while True:
+    while True:
+        try:
             current_time = time.time()
 
             # 1. Szívverés (Docker / Cloudflare timeout ellen)
@@ -53,10 +53,16 @@ def run_daemon():
             # Ciklusidő (15 mp bőven elég, hogy a Docker I/O-t pörgesse)
             time.sleep(600)
 
-    except KeyboardInterrupt:
-        print("\n💓 [Supervisor Daemon] Leállítva.", flush=True)
-    except Exception as e:
-        print(f"\n❌ [Supervisor Daemon] Kritikus hiba a háttérben: {e}", file=sys.stderr, flush=True)
+        except KeyboardInterrupt:
+            print("\n💓 [Supervisor Daemon] Leállítva.", flush=True)
+            break
+        except Exception as e:
+            print(f"\n❌ [Supervisor Daemon] Kritikus hiba a háttérben: {e}", file=sys.stderr, flush=True)
+            # Az önreflexió jegyében, ha lehal a daemon, automatikusan próbáljon újraindulni kis pihenő után,
+            # hogy ne maradjon a rendszer szívverés nélkül (rekurzió nélkül).
+            time.sleep(10)
+            print("🔄 [Supervisor Daemon] Automatikus újraindulás...", flush=True)
+            continue
 
 if __name__ == "__main__":
     run_daemon()

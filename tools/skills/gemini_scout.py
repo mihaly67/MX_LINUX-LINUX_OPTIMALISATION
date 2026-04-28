@@ -84,7 +84,7 @@ def ask_gemini(prompt):
     # Ha kifogytunk a próbálkozásokból, pihenjen hosszabban a bot.
     print("Kimerült a retry kvóta. Pihenés 10 percig...")
     time.sleep(600)
-    return "NO"
+    return "ERROR: Retry Exhausted"
 
 def process_unscanned_files():
     init_scanned_db()
@@ -132,8 +132,13 @@ Tartalom:
                         "gemini_analysis": analysis
                     }, jf)
                 print(f" [!] TALÁLAT MENTVE: {safe_name}")
-
-            mark_scanned(filepath)
+                mark_scanned(filepath)
+            elif analysis == "NO":
+                # Nem hasznos fájl, de sikeres elemzés
+                mark_scanned(filepath)
+            else:
+                # API hiba, Kvóta kimerülés vagy Hálózati gond
+                print(f" [!] Elemzés sikertelen (Kvóta/Hiba). A fájl ({filepath}) nem lett megjelölve, később újrapróbáljuk.")
 
             # API sebességkorlát tiszteletben tartása (pl. ingyenes Gemini-1.5-flash limitje: 15 RPM. 1 perc / 15 = 4 mp várakozás fájlonként)
             # A felhasználó előfizető, de biztonságos egy minimális sleep.
