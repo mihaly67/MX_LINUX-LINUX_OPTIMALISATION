@@ -192,8 +192,8 @@ def main():
     if gemini_key:
         try:
             from tools.vps_bridge import run_on_vps
-            # Létrehozzuk a .env fájlt a VPS-en biztonságosan
-            cmd = f"echo 'GEMINI_API_KEY={gemini_key}' > ~/Jules_mx/.env && chmod 600 ~/Jules_mx/.env"
+            # Hozzáadjuk a .env fájlhoz a VPS-en biztonságosan (append, hogy ne írjuk felül a régit)
+            cmd = f"echo 'GEMINI_API_KEY={gemini_key}' >> ~/Jules_mx/.env && chmod 600 ~/Jules_mx/.env"
             success, result = run_on_vps(cmd)
             if success:
                 print(f"{Fore.GREEN}   ✅ Gemini API kulcs szinkronizálva a VPS-re.{Style.RESET_ALL}")
