@@ -87,6 +87,20 @@ class TeachingAssistant:
                 tool_arg = user_query
         elif "token" in lower_query or "generate_token" in lower_query:
             tool_name = "generate_token"
+        elif "review" in lower_query or "kódolás" in lower_query:
+            tool_name = "code_review"
+            tool_arg = user_query
+        elif "fájl" in lower_query or "file" in lower_query or "olvas" in lower_query:
+            tool_name = "file_manager"
+            match = re.search(r"'([^']+)'", user_query)
+            if match:
+                tool_arg = match.group(1)
+            else:
+                tool_arg = user_query
+
+        # Bash felülírás elkerülése, ha review-ról van szó
+        if "review" in lower_query and tool_name == "bash_command":
+            tool_name = "code_review"
 
         if tool_name:
             # Ha felismertük a toolt, le is futtatjuk azonnal
@@ -94,7 +108,7 @@ class TeachingAssistant:
             if tool:
                 if tool_name in ["rag_progress", "read_memory", "generate_token", "condense_memory"]:
                     res = tool.execute()
-                elif tool_name in ["search_rag_knowledge", "ask_tour_guide"]:
+                elif tool_name in ["search_rag_knowledge", "ask_tour_guide", "code_review"]:
                     res = tool.execute(query=tool_arg)
                 else:
                     res = tool.execute(cmd=tool_arg)
@@ -254,6 +268,76 @@ def generate_auth_token():
     # A valódi JWT a Fő Agentnél is megvan (tools/skills/cognee_jwt_auth.py)
     return "Művelet sikeres, a Fő Agent jogosult a Cognee authentikációs elvek alapján a VPS API használatára."
 
+# ---- Modul 8: Code Reviewer (Kódolás és Ellenőrzés kiszervezése) ----
+def request_code_review(query: str):
+    try:
+        import urllib.request, json, os
+        # Mivel a lokális Ollama a VPS-en a Scout miatt 100% CPU-n pörög, és a timeoutokat dobálja,
+        # a Code Review folyamatot is a felhős Gemini API-ra bízzuk, ha van kulcs!
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if not api_key and os.path.exists(os.path.expanduser("~/Jules_mx/.env")):
+            with open(os.path.expanduser("~/Jules_mx/.env"), "r") as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        api_key = line.strip().split("=")[1]
+                        break
+
+        if api_key:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": "Kérlek végezz alapos Code Review-t a következő kódon, vagy adj tanácsot a kódoláshoz: " + query}]}],
+                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 500}
+            }
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={'Content-Type': 'application/json'})
+
+            # Debug céljából részletesebb hibaüzenet kezelése
+            try:
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    if "candidates" in result and len(result["candidates"]) > 0:
+                        return result["candidates"][0]["content"]["parts"][0]["text"]
+                    return "Nincs válasz a Geminitől."
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8')
+                return f"Gemini API HTTP Error {e.code}: {error_body}"
+        else:
+            return "Nincs Gemini API kulcs a Code Review-hoz, az Ollama pedig túlterhelt."
+    except Exception as e:
+        return f"Code Review hiba: {e}"
+
+# ---- Modul 9: File Manager (Biztonságos VPS fájlkezelés) ----
+def manage_file(cmd: str):
+    import os, shutil
+    try:
+        # A cmd egy egyedi string lesz: "ACTION|PATH|EXTRA"
+        parts = cmd.split("|")
+        action = parts[0].strip()
+        path = os.path.abspath(os.path.expanduser(parts[1].strip())) if len(parts) > 1 else ""
+
+        # Szigorú útvonalvédelem (Csak a ~/Jules_mx/ alatt dolgozhat)
+        # abs path validáció Path Traversal támadás ellen
+        jules_dir = os.path.abspath(os.path.expanduser("~/Jules_mx/"))
+        if not path.startswith(jules_dir):
+            return "Hiba: A Fájlkezelő csak a ~/Jules_mx/ könyvtáron belül használható biztonsági okokból."
+
+        if action == "read":
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()[:2000] # OOM védelem a hatalmas fájloknál
+        elif action == "delete":
+            if os.path.isfile(path):
+                os.remove(path)
+                return f"Fájl törölve: {path}"
+            return "Hiba: Fájl nem található."
+        elif action == "move" and len(parts) > 2:
+            target = os.path.abspath(os.path.expanduser(parts[2].strip()))
+            if not target.startswith(jules_dir): return "Hiba: Cél könyvtár nem Jules_mx."
+            shutil.move(path, target)
+            return f"Fájl mozgatva ide: {target}"
+        else:
+            return "Ismeretlen File Manager művelet."
+    except Exception as e:
+        return f"File Manager hiba: {e}"
+
 assistant = TeachingAssistant()
 assistant.register_tool(Tool("bash_command", "Futtat egy egyszerű bash/linux parancsot a VPS-en (pl. 'ls -l', 'free -h')", run_vps_bash_command))
 assistant.register_tool(Tool("rag_progress", "Lekérdezi a jelenlegi RAG feldolgozottsági százalékot", check_rag_progress))
@@ -262,6 +346,8 @@ assistant.register_tool(Tool("read_memory", "Kihozza a Fő Agent legutóbbi 10 t
 assistant.register_tool(Tool("condense_memory", "Lekérdezi az LLM alapú sűrített (condensed) memóriajelentést a Titkártól.", condense_vps_memory))
 assistant.register_tool(Tool("ask_tour_guide", "Kérdéseket válaszol meg a VPS felépítésével (fájlokkal, portokkal, processzekkel) kapcsolatban. Paramétere a kérdés.", ask_tour_guide))
 assistant.register_tool(Tool("generate_token", "Cognee ihlette JWT token generálás a biztonságos kommunikációhoz", generate_auth_token))
+assistant.register_tool(Tool("code_review", "A VPS-re kiszervezett Code Review funkció (paraméter: A kód vagy koncepció)", request_code_review))
+assistant.register_tool(Tool("file_manager", "A VPS biztonságos fájlkezelője. Argumentum szintaktika: ACTION|PATH|TARGET (pl. 'read|~/Jules_mx/alma.txt' vagy 'move|~/Jules_mx/alma.txt|~/Jules_mx/korte.txt')", manage_file))
 
 if __name__ == "__main__":
     import sys
