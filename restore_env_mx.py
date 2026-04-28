@@ -187,6 +187,23 @@ def main():
     else:
         print(f"{Fore.GREEN}   ✅ SSH kulcsok már léteznek.{Style.RESET_ALL}")
 
+    print(f"\n{Fore.CYAN}🚀 Gemini API integráció beállítása a VPS-en...{Style.RESET_ALL}")
+    gemini_key = os.environ.get("VPS_GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            from tools.vps_bridge import run_on_vps
+            # Létrehozzuk a .env fájlt a VPS-en biztonságosan
+            cmd = f"echo 'GEMINI_API_KEY={gemini_key}' > ~/Jules_mx/.env && chmod 600 ~/Jules_mx/.env"
+            success, result = run_on_vps(cmd)
+            if success:
+                print(f"{Fore.GREEN}   ✅ Gemini API kulcs szinkronizálva a VPS-re.{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.RED}   ❌ Hiba a Gemini kulcs VPS-re másolásakor: {result}{Style.RESET_ALL}")
+        except Exception as e:
+            print(f"{Fore.RED}   ❌ Hiba a VPS_GEMINI_API_KEY beállításánál: {e}{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.YELLOW}   ⚠️ Nincs VPS_GEMINI_API_KEY megadva a környezeti változókban. A VPS-en lévő kulcs nem frissül.{Style.RESET_ALL}")
+
     print(f"\n{Fore.GREEN}✅ KÖRNYEZET KÉSZ. RAG RENDSZER AKTÍV.{Style.RESET_ALL}")
 
 if __name__ == "__main__":

@@ -125,20 +125,22 @@ def check_rag_progress():
 # ---- Modul 3: RAG Találat Elemző (Analyst Bot) ----
 def search_rag_knowledge(query: str):
     try:
-        safe_query = query.replace('"', '').replace("'", "")
+        import base64
+        b64_query = base64.b64encode(query.encode('utf-8')).decode('utf-8')
         ALERTS_DIR = '/home/misi/Jules_mx/alerts/Chatbot'
 
         vps_python_script = f\"\"\"
-import os, json
+import os, json, base64
 results = []
 count = 0
+query = base64.b64decode('{b64_query}').decode('utf-8').lower()
 for root, _, files in os.walk('{ALERTS_DIR}'):
     for file in files:
         if file.endswith('.json'):
             try:
                 with open(os.path.join(root, file), "r", encoding="utf-8") as f:
                     content = f.read()
-                    if '{safe_query}' in content.lower():
+                    if query in content.lower():
                         data = json.loads(content)
                         analysis = data.get("llama3_analysis", data.get("qwen_analysis", ""))
                         if analysis and len(str(analysis)) > 10:
@@ -221,9 +223,15 @@ if __name__ == "__main__":
 """
 
 def talk_to_assistant(query):
+    # A framework kód base64 kódolása
     b64_script = base64.b64encode(VPS_FRAMEWORK_CODE.encode('utf-8')).decode('utf-8')
-    safe_query = query.replace('"', '\\"').replace("'", "\\'")
-    cmd = f"python3 -c \"import base64; import sys; sys.argv=['', '{safe_query}']; exec(base64.b64decode('{b64_script}').decode('utf-8'))\""
+
+    # A query base64 kódolása a Command Injection / Shell beillesztési sebezhetőség kivédésére
+    import shlex
+    b64_query = base64.b64encode(query.encode('utf-8')).decode('utf-8')
+
+    # A python script futásidőben dekódolja a base64 query-t, így a bash nem tudja értelmezni a beágyazott shell karaktereket
+    cmd = f"python3 -c \"import base64; import sys; sys.argv=['', base64.b64decode('{b64_query}').decode('utf-8')]; exec(base64.b64decode('{b64_script}').decode('utf-8'))\""
 
     success, result = run_on_vps(cmd)
     if success:

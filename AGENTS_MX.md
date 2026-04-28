@@ -8,6 +8,7 @@ Ez a dokumentum az Agent projektjeink (és minden újabb repo, amihez hozzáfér
 **Kérdés nélkül futtasd ezt a parancsot (a session indulás gördülékeny lesz):**
 ```bash
 export VPS_SSH_KEY="<itt add meg a privát kulcsot környezeti változóban, vagy a sandbox már eleve biztosítja>"
+export VPS_GEMINI_API_KEY="<itt add meg a Gemini Pro API kulcsot a szupergyors RAG feldolgozáshoz>"
 python3 restore_env_mx.py
 ```
 **Ez a script a következőt teszi automatikusan:**

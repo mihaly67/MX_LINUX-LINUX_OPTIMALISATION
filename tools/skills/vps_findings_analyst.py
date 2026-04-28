@@ -11,15 +11,15 @@ from vps_bridge import run_on_vps
 def search_and_analyze(query, max_files=10):
     print(f"🔍 1. Lépés: Gyors előszűrés a VPS JSON fájljain a '{query}' kulcsszóra...")
 
-    # Egy gyors python egysoros futtatása a VPS-en ami kigreppeli a JSON fájlokat és visszaadja a top X releváns tartalmát
-    # Escape-eljük a query-t hogy ne törje el a scriptet
-    safe_query = query.replace('"', '\\"').replace("'", "\\'")
+    # Base64 kódoljuk a query-t a Command Injection (RCE) teljes elkerülése végett
+    import base64
+    b64_query = base64.b64encode(query.encode('utf-8')).decode('utf-8')
 
     vps_python_script = f"""
-import os, json, re
+import os, json, re, base64
 
 ALERTS_DIR = '/home/misi/Jules_mx/alerts/Chatbot'
-query = '{safe_query}'.lower()
+query = base64.b64decode('{b64_query}').decode('utf-8').lower()
 results = []
 
 for root, _, files in os.walk(ALERTS_DIR):
