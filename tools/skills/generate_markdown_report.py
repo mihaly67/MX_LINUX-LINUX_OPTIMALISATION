@@ -69,11 +69,11 @@ def generate_report():
     stats = calculate_progress()
 
     with open(OUTPUT_MD, "w", encoding="utf-8") as md:
-        md.write("# 🤖 Llama3 Scout Autonóm RAG Elemzési Jelentés\n\n")
+        md.write("# 🤖 Gemini/Llama Scout Autonóm RAG Elemzési Jelentés\n\n")
         md.write(f"**Utolsó frissítés:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
         md.write("## 📊 Átfogó Feldolgozási Progress\n\n")
-        md.write("A Llama3 bot folyamatosan szkenneli a RAG adatbázisok tartalmát. Az alábbiak mutatják, hány kód fájlon futott eddig végig:\n\n")
+        md.write("A RAG Scout bot (Gemini/Llama) folyamatosan szkenneli a RAG adatbázisok tartalmát. Az alábbiak mutatják, hány kód fájlon futott eddig végig:\n\n")
 
         for rag_name, stat in stats.items():
             if stat["total"] > 0:
@@ -103,7 +103,7 @@ def generate_report():
                     with open(filepath, "r", encoding="utf-8") as jf:
                         data = json.load(jf)
                         source_file = data.get("file", "Ismeretlen fájl")
-                        analysis = data.get("llama3_analysis", data.get("qwen_analysis", "")).strip()
+                        analysis = data.get("gemini_analysis", data.get("llama3_analysis", data.get("qwen_analysis", ""))).strip()
 
                         md.write(f"### 📄 Fájl: `{source_file}`\n")
                         md.write(f"> {analysis}\n\n")

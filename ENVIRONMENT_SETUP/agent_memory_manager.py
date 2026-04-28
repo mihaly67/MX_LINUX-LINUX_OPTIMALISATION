@@ -120,22 +120,15 @@ def format_memory_for_agent(entries, exec_time=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Agent Long-Term Memory Manager")
-    parser.add_argument("--action", choices=["write", "read", "start_session", "end_session"], required=True, help="Művelet: írás, olvasás, vagy session jelölés")
+    parser.add_argument("--action", choices=["write", "read", "start_session", "end_session", "sync"], required=True, help="Művelet: írás, olvasás, session jelölés vagy cloud sync")
     parser.add_argument("--category", type=str, default="General", help="A memória kategóriája (pl. MLOps, RAG, Strategy)")
     parser.add_argument("--content", type=str, help="A memóriába írandó tartalom (csak --action write esetén)")
     parser.add_argument("--limit", type=int, default=5, help="Hány utolsó emléket olvassunk vissza (csak --action read esetén)")
 
     args = parser.parse_args()
 
-    if args.action == "write":
-        if not args.content:
-            print("❌ Hiba: Írás esetén kötelező a --content megadása!")
-        else:
-            write_memory(args.category, args.content)
-
-    elif args.action == "start_session":
-        mark_session("[SESSION_START]")
-        print("\n🤖 [Kontextus Titkár] Automatikus szinkronizáció indítása...")
+    def do_sync():
+        print("\n🤖 [Kontextus Titkár] Lokális memória felhő-szinkronizáció indítása...")
         try:
             import subprocess, sys
             p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "skills", "context_secretary.py")
@@ -143,8 +136,24 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"⚠️ Hiba a Titkár hívásakor: {e}")
 
+    if args.action == "write":
+        if not args.content:
+            print("❌ Hiba: Írás esetén kötelező a --content megadása!")
+        else:
+            write_memory(args.category, args.content)
+            # Automatikus szinkronizáció a Fő Agent nyugalma érdekében (így a VPS is azonnal frissül a write-nál)
+            do_sync()
+
+    elif args.action == "sync":
+        do_sync()
+
+    elif args.action == "start_session":
+        mark_session("[SESSION_START]")
+        do_sync()
+
     elif args.action == "end_session":
         mark_session("[SESSION_END]")
+        do_sync()
 
     elif args.action == "read":
         entries, exec_time = read_memory(limit=args.limit, category_filter=args.category if args.category != "General" else None)

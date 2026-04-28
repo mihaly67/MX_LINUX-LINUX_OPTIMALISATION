@@ -2,13 +2,21 @@ import argparse
 import jwt
 import time
 
-def generate_agent_token(user_id: str, minutes_valid: int = 60, secret_key: str = "jules-secret-agent-key-32bytes-long!"):
+import os
+
+def get_secret_key():
+    return os.environ.get("JULES_JWT_SECRET", "default-insecure-key-must-be-changed-in-production!")
+
+def generate_agent_token(user_id: str, minutes_valid: int = 60, secret_key: str = None):
     """
     A Chatbot RAG-ban talált `cognee-main/cognee/get_token.py` JWT logika
     alapján épített biztonsági modul a Fő Agent számára.
     Ez a modul lehetővé teszi, hogy időkorlátos tokenekkel authentikáljuk
     a jövőbeni belső mikroszerveres API kéréseket (Zero-Trust security).
     """
+    if secret_key is None:
+        secret_key = get_secret_key()
+
     expiration_time = time.time() + (minutes_valid * 60)
     payload = {
         "user_id": user_id,
@@ -19,7 +27,9 @@ def generate_agent_token(user_id: str, minutes_valid: int = 60, secret_key: str 
     token = jwt.encode(payload, secret_key, algorithm="HS256")
     return token
 
-def verify_agent_token(token: str, secret_key: str = "jules-secret-agent-key-32bytes-long!"):
+def verify_agent_token(token: str, secret_key: str = None):
+    if secret_key is None:
+        secret_key = get_secret_key()
     try:
         decoded_payload = jwt.decode(token, secret_key, algorithms=["HS256"])
         return True, decoded_payload
