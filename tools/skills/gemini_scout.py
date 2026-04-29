@@ -97,7 +97,7 @@ def process_unscanned_files():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.md'")
+        cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'")
         all_files = cursor.fetchall()
         conn.close()
 

@@ -38,7 +38,7 @@ def calculate_progress():
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            cursor.execute("SELECT filepath FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm'")
+            cursor.execute("SELECT filepath FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'")
             all_files = {row[0] for row in cursor.fetchall()}
             conn.close()
 

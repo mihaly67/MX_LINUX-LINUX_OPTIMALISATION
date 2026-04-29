@@ -70,6 +70,9 @@ class TeachingAssistant:
             tool_arg = user_query
         elif "százalék" in lower_query or "rag_progress" in lower_query:
             tool_name = "rag_progress"
+        elif "stealth" in lower_query or "böngésző" in lower_query:
+            tool_name = "browser"
+            tool_arg = user_query
         elif "keresd" in lower_query or "search_rag" in lower_query or "talált" in lower_query:
             tool_name = "search_rag_knowledge"
             # Extraháljuk a keresőszót az aposztrófok közül
