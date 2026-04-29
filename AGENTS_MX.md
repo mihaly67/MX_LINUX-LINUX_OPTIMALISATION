@@ -17,6 +17,12 @@ python3 restore_env_mx.py
 3. A környezeti változóból (`VPS_SSH_KEY`) beolvasott privát kulccsal automatikusan inicializálja a jelszómentes SSH hitelesítést a VPS felé.
 4. **Felébreszti a Kontextus Titkárt (Context Secretary)** a VPS-en, ami a `qwen2.5:1.5b` LLM-et használva 150 tokenes magyar nyelvű összefoglalót ad az eddigi munkáról.
 
+**MIUTÁN LEFUTOTT A SZKRIPT, AUTOMATIKUSAN TEDD A KÖVETKEZŐKET:**
+A Fő Agent (te) egy új session elején köteles autonóm módon (kérdés nélkül) kontextusba helyezni magát, Mielőtt üdvözölné a felhasználót. Ehhez:
+1. **Lépj be a VPS-re és futtasd az Idegenvezetőt:** Használd a `python3 tools/skills/vps_tour_guide.py` eszközt, hogy azonnal képbe kerülj a szerver architektúrájával, a hardverrel, és a RAG adatbázisok állapotával.
+2. **Olvasd el a memóriát:** Olvasd ki a lokális memóriafájlt (pl. `cat Knowledge_Base/agent_memory.jsonl` vagy használd a memória-olvasó eszközeidet), hogy tudd, hol hagytuk abba a munkát legutóbb.
+3. **Bejelentkezés:** Csak ezután köszöntsd a felhasználót, jelezve neki (kizárólag magyarul), hogy sikeresen felébredtél, kontextusba helyezted magad a VPS-en és a memóriából, és készen állsz a folytatásra.
+
 ---
 
 ## 2. A VPS (MÁSODIK AGY) HASZNÁLATA ÉS KISZERVEZÉS

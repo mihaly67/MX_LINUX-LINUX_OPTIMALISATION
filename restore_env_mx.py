@@ -7,7 +7,7 @@ import sqlite3
 
 def install_dependencies():
     print("🔧 Függőségek ellenőrzése és telepítése...")
-    required = ["gdown", "faiss-cpu", "sentence-transformers", "numpy", "pandas", "colorama"]
+    required = ["gdown", "faiss-cpu", "sentence-transformers", "numpy", "pandas", "colorama", "paramiko"]
     for pkg in required:
         try:
             module_name = pkg
