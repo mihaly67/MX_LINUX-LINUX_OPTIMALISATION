@@ -1,69 +1,59 @@
 import argparse
-import sys
-import os
 
-# Felszabadítjuk a vps_bridge importját
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from vps_bridge import run_on_vps
+def ask_tour_guide(question=None):
+    # Statikus, azonnali (szinkron) és átfogó válasz, LLM timeout és hiba nélkül!
+    # Ez a szöveg a következő Jules Agent számára szolgál majd egyfajta "Rendszer Blueprint"-ként.
+    guide_text = """
+    =======================================================
+    🗺️ ÜDVÖZLÖM A JULES_MX VPS IDEGENVEZETŐ RENDSZERÉBEN! 🗺️
+    =======================================================
+    Te a Fő Agent (Session Jules) vagy. Azért olvasod ezt, mert egy korábbi session-ből, vagy egy másik Jules testvéredtől
+    átvetted az irányítást a Misi nevű felhasználó Contabo Cloud VPS-e (IP: 5.189.163.88) fölött.
 
-def ask_tour_guide(question):
-    # A VPS rendszerstruktúra hardcoded vagy lekérdezett formája:
-    system_knowledge = """
-    Te egy 'VPS Idegenvezető Subagent' vagy a Jules_mx rendszerben. A feladatod, hogy a Fő Agent (Session Jules) kérdéseire válaszolj a VPS struktúrájával és folyamataival kapcsolatban.
+    ### 🖥️ A VPS HARDVER ÉS KÖRNYEZET ###
+    - CPU: 8 Mag (Ryzen)
+    - RAM: 24 GB + 16 GB SWAP (Kiterjesztett Memória, OOM ellen)
+    - OS: MX Linux alapok, Ubuntu LTS / Debian kompatibilitás.
+    - Fő munkakönyvtár: `~/Jules_mx/`
 
-    A VPS struktúrája és tudása:
-    - A Főkönyvtár a `~/Jules_mx/`.
-    - `scripts/`: Itt találhatóak a python agent logikák. Főbb fájlok:
-        - `vps_micro_server.py`: FastAPI alapú webserver (Micro Brain). Port 8000, végpontok: /execute_async, /rag_search, /summarize_memory, /scout_progress, /code_assist.
-        - `qwen_scout.py` (vagy `llama3_scout.py`): Háttérben folyamatosan futó RAG scout, amely Llama 3 (vagy Qwen) modellt használ, hogy releváns kódrészleteket keressen az adatbázisokban.
-        - `generate_markdown_report.py`: Az alert fájlokból olvasható markdown jelentést generál.
-    - `alerts/`: Ide menti a scout a felfedezéseit. Alkönyvtárak ragonként: `Chatbot`, `Gerilla`, `MX_Linux`. Itt található az `alerts_summary.md` is.
-    - `memory_offload/`: Tartalmazza a `backup.jsonl` memóriát a Context Secretary számára.
-    - `temp/`: Ideiglenes fájlok és SQLite duplikáció-szűrő (`scanned_files.db`).
-    - `RAG_DB/`: Bár a fő RAG fájlok a `~/` alatt vannak unzippelve, ide is kerülhetnek kiegészítő adatok. Fő útvonalak: `~/Gerilla_RAG/Gerilla_RAG.db`, `~/MX_LINUX_RAG/mx_linux_knowledge.db`, `~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db`.
-    - `venv/`: Itt található a python izolált környezet a mikroszerverhez és a csomagokhoz.
-    - Ollama szerver: 11434-es porton fut a modellek kiszolgálására (Llama 3 8B, Qwen).
+    ### 🤖 AUTONÓM TANÁRSEGÉD & SUBAGENTEK ###
+    - A Fő asszisztensed: `~/Jules_mx/scripts/vps_teaching_assistant.py` (ReAct minta, eszközei: bash, evaluate, handoff, browser).
+    - Handoff (Delegálás): Ha egy probléma túl komplex, a Tanársegéd képes a `handoff` (Delegál) eszközzel átadni a feladatot az Ollama Llama 3 8B Specialistának.
+    - AI Evaluator: Az `evaluate` eszközzel a Tanársegéd képes más kimeneteket lepontozni (Memary framework logika).
+    - Stealth Browser: A `browser` eszköz a `browser_stealth_manager.py` segítségével CDP protokollon fej nélküli (headless) Chromiumot futtat (kikerülve a bot-szűrőket).
+    - RAG Elemző: `~/Jules_mx/scripts/vps_findings_analyst.py` (Bash grep + LLM szintézis a OOM ellen).
 
-    A RAG haladás jelenleg ~40%-on áll, amelyet a `curl -s http://127.0.0.1:8000/scout_progress` paranccsal vagy a mikroszerveren keresztül lehet lekérdezni.
+    ### 📚 RAG (RETRIEVAL-AUGMENTED GENERATION) ADATBÁZISOK ###
+    A VPS elsődleges célja az AI frameworkök és kódok RAG feldolgozása. A scoutok (gemini_scout.py, llama3_scout.py) csak forráskódra (.py, .js, .c stb.) szűrnek.
+    1. Chatbot RAG: `~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db` (Befejezve: ~72%)
+    2. Gerilla RAG: `~/Gerilla_RAG/Gerilla_RAG.db` (Befejezve: ~23%)
+    3. MX_Linux RAG: `~/MX_LINUX_RAG/mx_linux_knowledge.db` (Befejezve: ~2%)
 
-    Kérdés: {question}
+    A találati JSON fájlok a `~/Jules_mx/alerts/{RAG_NEVE}/` könyvtárban gyűlnek.
+    A `generate_markdown_report.py` generálja az összesítést az `alerts_summary.md` fájlba.
+
+    ### 🔒 BIZTONSÁG & API ###
+    - JWT Hitelesítés: `cognee_jwt_auth.py` a lokális repóban generálja a tokeneket a `VPS_JWT_SECRET` környezeti változó alapján.
+    - API Végpontok: A `vps_micro_server.py` a 8000-es porton fut, és olyan végpontokat ad, mint `/execute_async`, `/rag_search`, `/code_assist`.
+    - Ollama API: 11434-es port.
+    - Biztonságos SSH: Az SSH kulcs beállítása a lokális `restore_env_mx.py` futtatásával történik, ami a `VPS_SSH_KEY` változót használja.
+
+    ### 💡 KÖVETKEZŐ LÉPÉS EGY ÚJ JULES SZÁMÁRA ###
+    Mivel a Chatbot RAG 72%-nál jár és rengeteg komplex frameworkot (Memary, OpenViking, Mem0) fedezett fel,
+    a te feladatod az, hogy ezekből a JSON fájlokból származó rekurzív/iteratív és kontextus-kezelő logikákat
+    beépítsd a Fő Agent (Jules) lokális képességei (skills) közé, vagy továbbfejleszd a VPS Tanársegédet!
+
+    =======================================================
     """
 
-    prompt = system_knowledge.format(question=question)
-
-    # Kérést indítunk a VPS mikroszerver code_assist vagy egy custom prompt végpontja felé (ami az ollamát használja)
-    import requests
-    try:
-        # A legegyszerűbb, ha a már meglévő vps_bridge run_on_vps-el hívjuk meg a curl-t, hogy biztosan a VPS lokális Ollama-ját érjük el.
-        # Ehhez escape-eljük a promptot:
-        import json
-        payload = {"model": "llama3", "prompt": prompt, "stream": False}
-        payload_str = json.dumps(payload).replace("'", "'\\''")
-
-        curl_command = f"curl -s -X POST http://localhost:11434/api/generate -H 'Content-Type: application/json' -d '{payload_str}'"
-
-        success, result = run_on_vps(curl_command)
-        if success and result:
-            import json
-            try:
-                data = json.loads(result)
-                response_text = data.get("response", "Nincs válasz az Ollamától.")
-                return response_text
-            except json.JSONDecodeError:
-                return "JSON dekódolási hiba az Ollama válaszában:\n" + result
-        else:
-            return "Hiba a VPS elérésében: " + str(result)
-
-    except Exception as e:
-        return f"Hiba az idegenvezető hívásakor: {e}"
+    if question:
+        return guide_text + f"\n\nA specifikus kérdésedre ('{question}') adott válasz: Olvasd át a fenti System Blueprint-et. Ez egy statikus idegenvezető. Interaktív kérdésekhez használd a vps_teaching_assistant.py-t!"
+    return guide_text
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="VPS Idegenvezető Subagent")
-    parser.add_argument("--question", required=True, help="A kérdés, amit fel akarsz tenni a VPS rendszerről.")
+    parser = argparse.ArgumentParser(description="VPS Idegenvezető Subagent (Statikus, gyors Blueprint)")
+    parser.add_argument("--question", required=False, help="A kérdés, amit fel akarsz tenni a VPS rendszerről.")
     args = parser.parse_args()
 
-    print(f"🤖 Kérdés feldolgozása a VPS Llama3-al: {args.question}\n")
-    answer = ask_tour_guide(args.question)
-
     print("\n--- 🧠 VPS Idegenvezető Válasza ---")
-    print(answer)
+    print(ask_tour_guide(args.question))
