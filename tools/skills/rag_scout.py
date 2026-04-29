@@ -95,7 +95,7 @@ def extract_signatures(db_path: str, output_file: str, target_repo: str = None, 
     cursor = conn.cursor()
 
     # Építjük az alapszűrést
-    base_query = "SELECT source_repo, filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.bash' OR filepath LIKE '%.md'"
+    base_query = "SELECT source_repo, filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.bash' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'"
     params = []
 
     if target_repo:

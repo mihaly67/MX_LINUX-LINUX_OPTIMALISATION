@@ -76,7 +76,7 @@ def scout_loop():
             cursor = conn.cursor()
 
             try:
-                cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm'")
+                cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'")
                 files = cursor.fetchall()
             except sqlite3.Error:
                 print(f"❌ Sémahiba a(z) {db_path} adatbázisban.")
