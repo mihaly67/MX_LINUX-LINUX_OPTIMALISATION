@@ -342,6 +342,39 @@ def manage_file(cmd: str):
     except Exception as e:
         return f"File Manager hiba: {e}"
 
+
+def ai_evaluation(query: str):
+    import subprocess
+    import os
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_evaluator.py")
+    result = subprocess.run(["python3", script_path, "--query", query], capture_output=True, text=True)
+    return result.stdout
+
+def launch_stealth_browser(cmd: str):
+    import subprocess
+    import os
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_stealth_manager.py")
+    if "stop" in cmd.lower():
+        result = subprocess.run(["python3", script_path, "--stop"], capture_output=True, text=True)
+        return result.stdout
+    else:
+        result = subprocess.run(["python3", script_path], capture_output=True, text=True)
+        return result.stdout
+
+def escalate_to_specialist(query: str, specialist_type: str = "coder"):
+    prompt = f"Te egy {specialist_type} specialista vagy. Kérlek oldd meg a következő problémát: {query}"
+    url = "http://localhost:11434/api/generate"
+    import json, urllib.request
+    data = json.dumps({"model": "llama3", "prompt": prompt, "stream": False, "options": {"num_predict": 500}}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return f"[{specialist_type.upper()} SPECIALISTA VÁLASZA] " + result.get("response", "Nincs válasz.")
+    except Exception as e:
+        return f"Hiba az eszkalációs LLM hívásakor: {e}"
+
+
 assistant = TeachingAssistant()
 assistant.register_tool(Tool("bash_command", "Futtat egy egyszerű bash/linux parancsot a VPS-en (pl. 'ls -l', 'free -h')", run_vps_bash_command))
 assistant.register_tool(Tool("rag_progress", "Lekérdezi a jelenlegi RAG feldolgozottsági százalékot", check_rag_progress))
@@ -351,6 +384,9 @@ assistant.register_tool(Tool("condense_memory", "Lekérdezi az LLM alapú sűrí
 assistant.register_tool(Tool("ask_tour_guide", "Kérdéseket válaszol meg a VPS felépítésével (fájlokkal, portokkal, processzekkel) kapcsolatban. Paramétere a kérdés.", ask_tour_guide))
 assistant.register_tool(Tool("generate_token", "Cognee ihlette JWT token generálás a biztonságos kommunikációhoz", generate_auth_token))
 assistant.register_tool(Tool("code_review", "A VPS-re kiszervezett Code Review funkció (paraméter: A kód vagy koncepció)", request_code_review))
+assistant.register_tool(Tool("browser", "A stealth/headless CDP Chrome böngésző indítása vagy leállítása.", launch_stealth_browser))
+assistant.register_tool(Tool("handoff", "Delegálja a kérdést egy Llama 3 specialistának (pl. coder, devops).", escalate_to_specialist))
+assistant.register_tool(Tool("evaluate", "A Memary-féle AI Benchmarking (minőségértékelés) futtatása a kimeneten.", ai_evaluation))
 assistant.register_tool(Tool("file_manager", "A VPS biztonságos fájlkezelője. Argumentum szintaktika: ACTION|PATH|TARGET (pl. 'read|~/Jules_mx/alma.txt' vagy 'move|~/Jules_mx/alma.txt|~/Jules_mx/korte.txt')", manage_file))
 
 if __name__ == "__main__":
