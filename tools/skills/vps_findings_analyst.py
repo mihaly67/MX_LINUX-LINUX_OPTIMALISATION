@@ -19,7 +19,7 @@ def search_and_analyze(query, max_files=10):
 import os, json, re, base64
 
 ALERTS_DIR = '/home/misi/Jules_mx/alerts/Chatbot'
-query = base64.b64decode('{b64_query}').decode('utf-8').lower()
+query = base64.b64decode('{b64_query}').decode('utf-8')
 results = []
 
 for root, _, files in os.walk(ALERTS_DIR):
@@ -29,7 +29,8 @@ for root, _, files in os.walk(ALERTS_DIR):
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    if query in content.lower():
+                    keywords = [k.strip().lower() for k in query.split(' OR ')]
+                    if any(k in content.lower() for k in keywords):
                         data = json.loads(content)
                         results.append({{"file": data.get("file", file), "analysis": data.get("llama3_analysis", "")}})
             except Exception:
