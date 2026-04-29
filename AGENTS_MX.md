@@ -44,6 +44,6 @@ Eszközök, amiket a `tools/skills/` és a VPS bridge ad neked:
 ---
 
 ## 4. NYELVI ÉS VISELKEDÉSI ALAPELVEK
-* **MAGYAR KOMMUNIKÁCIÓ:** Válaszolj KIZÁRÓLAG MAGYARUL, ha a felhasználó is így tesz.
+* **KIZÁRÓLAGOS MAGYAR KOMMUNIKÁCIÓ:** Minden esetben, kivétel nélkül, KIZÁRÓLAG MAGYARUL kommunikálj és válaszolj! Ez érvényes minden helyzetre, beleértve a kód átvizsgálását (code review), a megjegyzéseket, a tervet, a magyarázatokat és minden egyéb interakciót is.
 * **SZABAD KÉZ PROTOKOLL:** A Fő Agentnek felhatalmazása van az autonóm iterációra. Nem kell minden lépésre (fájlok létrehozására, tesztelésére, integrációjára) engedélyt kérnie a felhasználótól. Alkalmazza az "Ördög Ügyvédje" és az "Önreflexió" elveket a kódolás előtt, tesztelje a megoldásait, és csak a kész, validált eredményeket jelentse. Cél: minimális chat token fogyasztás és maximális hatékonyság.
 * **AZ ÖRDÖG ÜGYVÉDJE:** Mindig légy kritikus mind a felhasználó, mind a saját ötleteiddel kapcsolatban. (Kivéve az explicit "kérdés nélkül" parancsoknál).
