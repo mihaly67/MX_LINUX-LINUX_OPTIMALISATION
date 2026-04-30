@@ -7,9 +7,18 @@ import time
 
 # Dinamikus RAG váltó - mind a 3 RAG DB elérési útja és rövid neve a csoportosításhoz
 DB_PATHS = {
-    "Gerilla": os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db"),
-    "Chatbot": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
-    "MX_Linux": os.path.expanduser("~/MX_LINUX_RAG/mx_linux_knowledge.db")
+    "Chatbot": {
+        "path": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
+        "prompt_goal": "A Fő Agent környezetem fejlesztése, autonóm működés optimalizálása, memóriakezelés, kontextus-sűrítés és tehermentesítés. Keresd az agent loop, memória (short/long term), retry policy és tool routing megoldásokat."
+    },
+    "Gerilla": {
+        "path": os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db"),
+        "prompt_goal": "Hálózat, proxy (stealth, evasion), API integráció, VPS hardver maximális de törvényes kihasználása, OOM elkerülése, mini LLM-ek hatékony alkalmazása, folyamatautomatizálás."
+    },
+    "MX_Linux": {
+        "path": os.path.expanduser("~/MX_LINUX_RAG/mx_linux_knowledge.db"),
+        "prompt_goal": "Kifejezetten az MX Linux OS operációs rendszer szintű fejlesztése, optimalizálása, bash scriptek és kernel tuning."
+    }
 }
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -26,8 +35,7 @@ for rag_name in DB_PATHS.keys():
 def init_scanned_db():
     conn = sqlite3.connect(SCANNED_DB)
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS scanned
-                      (filepath TEXT PRIMARY KEY)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS scanned (filepath TEXT PRIMARY KEY)''')
     conn.commit()
     conn.close()
 
@@ -50,7 +58,8 @@ def ask_llama3(prompt):
     payload = {
         "model": "llama3",
         "prompt": prompt,
-        "stream": False
+        "stream": False,
+        "options": {"num_predict": 150, "temperature": 0.1}
     }
     try:
         resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
@@ -59,23 +68,26 @@ def ask_llama3(prompt):
         return f"Error: {e}"
 
 def scout_loop():
-    print("🤖 Llama3 Scout elindult... (Multi-RAG Dinamikus Váltással, Maximális Erőforrással!)")
+    print("🤖 Llama3 Scout elindult... (Multi-RAG Dinamikus Váltással, PADLÓGÁZON)")
     init_scanned_db()
 
     while True:
-        # Végigmegyünk az adatbázisokon
         all_dbs_done = True
 
-        for rag_name, db_path in DB_PATHS.items():
+        for rag_name, config in DB_PATHS.items():
+            db_path = config["path"]
+            prompt_goal = config["prompt_goal"]
+
             if not os.path.exists(db_path):
                 print(f"⚠️ Nem található adatbázis: {db_path}")
                 continue
 
-            print(f"\n📂 RAG Adatbázis elemzése: {db_path} (Csoport: {rag_name})")
+            print(f"\\n📂 RAG Adatbázis elemzése: {db_path} (Csoport: {rag_name})")
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
             try:
+                # Szigorúan csak kód fájlok (no bloat)
                 cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'")
                 files = cursor.fetchall()
             except sqlite3.Error:
@@ -94,9 +106,8 @@ def scout_loop():
             all_dbs_done = False
             print(f"Összes fájl: {len(files)}, Ebből még nem vizsgált: {len(unscanned_files)}")
 
-            # Csináljunk meg egy adatbázisból 500 fájlt, majd lépjünk a következőre, hogy ne ragadjunk le egy helyen (Round Robin)
             batch_count = 0
-            while unscanned_files and batch_count < 500:
+            while unscanned_files and batch_count < 2000:
                 filepath, content = random.choice(unscanned_files)
                 unscanned_files.remove((filepath, content))
                 batch_count += 1
@@ -107,10 +118,12 @@ def scout_loop():
                     continue
 
                 print(f"🔍 Elemzem ({rag_name}): {filepath} ...")
-                prompt = f"""You are a cybersecurity, AI architecture and Python expert assistant.
-Review the following code file named '{filepath}'.
-Is this code useful for an AI agent infrastructure (e.g., automation, process management, API wrapping, code generation, testing automation, stealth operation)?
-Answer with a short summary of what it does, and start your answer with 'YES:' if it is highly relevant and useful, or 'NO:' if it is just a standard/boring file.
+                prompt = f"""Te egy AI architecture és Python szakértő asszisztens vagy.
+A fő kutatási fókusz/kritérium ehhez az adatbázishoz: {prompt_goal}
+
+Ez a fájl ({filepath}) tartalmazza a fent felsorolt kritériumoknak megfelelő hasznos kódot vagy logikát, amit átvehetünk egy saját Autonóm Agent be?
+Ha IGEN, válaszolj 'YES:' kezdetű sorral, majd 1-2 mondatban magyarázd el magyarul, miért hasznos a fájl.
+Ha NEM releváns (pl. GUI, adatbázis séma, teszt dummy data, frontend HTML), válaszolj 'NO'-val.
 
 CODE:
 {content}
@@ -125,16 +138,15 @@ CODE:
                         "file": filepath,
                         "llama3_analysis": response
                     }
-                    safe_name = filepath.replace("/", "_").replace("\\", "_")
+                    safe_name = filepath.replace("/", "_").replace("\\\\", "_")
 
-                    # Mentés a RAG-specifikus almappába
                     rag_alert_dir = os.path.join(BASE_ALERTS_DIR, rag_name)
-                    with open(os.path.join(rag_alert_dir, f"{safe_name}.json"), "w") as f:
-                        json.dump(alert, f)
+                    with open(os.path.join(rag_alert_dir, f"{safe_name}.json"), "w", encoding="utf-8") as f:
+                        json.dump(alert, f, ensure_ascii=False)
 
         if all_dbs_done:
             print("🏁 Minden adatbázis minden kódját feldolgoztam! Várakozás új RAG frissítésre...")
-            time.sleep(3600) # 1 órát alszik, hátha jön új fájl
+            time.sleep(180) # 3 percet alszik, hátha jön új fájl
 
 if __name__ == "__main__":
     scout_loop()
