@@ -93,7 +93,7 @@ def process_unscanned_files():
         if not os.path.exists(db_path):
             continue
 
-        print(f"\\nAdatbázis feldolgozása: {rag_name} ({db_path})")
+        print(f"\nAdatbázis feldolgozása: {rag_name} ({db_path})")
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
@@ -121,7 +121,7 @@ Tartalom:
 
             if analysis.startswith("YES"):
                 # Mentjük a hasznos találatot JSON-ként
-                safe_name = filepath.replace("/", "_").replace("\\\\", "_") + ".json"
+                safe_name = filepath.replace("/", "_").replace("\\", "_") + ".json"
                 out_path = os.path.join(BASE_ALERTS_DIR, rag_name, safe_name)
 
                 with open(out_path, "w", encoding="utf-8") as jf:
