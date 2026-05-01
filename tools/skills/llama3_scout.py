@@ -7,21 +7,13 @@ import time
 
 # Dinamikus RAG váltó - mind a 3 RAG DB elérési útja és rövid neve a csoportosításhoz
 DB_PATHS = {
-    "Chatbot": {
-        "path": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
-        "prompt_goal": "A Fő Agent környezetem fejlesztése, autonóm működés optimalizálása, memóriakezelés, kontextus-sűrítés és tehermentesítés. Keresd az agent loop, memória (short/long term), retry policy és tool routing megoldásokat."
-    },
-    "Gerilla": {
-        "path": os.path.expanduser("~/Gerilla_RAG/Gerilla_RAG.db"),
-        "prompt_goal": "Hálózat, proxy (stealth, evasion), API integráció, VPS hardver maximális de törvényes kihasználása, OOM elkerülése, mini LLM-ek hatékony alkalmazása, folyamatautomatizálás."
-    },
-    "MX_Linux": {
-        "path": os.path.expanduser("~/MX_LINUX_RAG/mx_linux_knowledge.db"),
-        "prompt_goal": "Kifejezetten az MX Linux OS operációs rendszer szintű fejlesztése, optimalizálása, bash scriptek és kernel tuning."
+    "BRAIN2_MCP_Focus": {
+        "path": os.path.expanduser("/home/misi/BRAIN2_DEV_RAG/brain2_dev_knowledge.db"),
+        "prompt_goal": "KERESS MINDENT AMI MCP (Model Context Protocol) KAPCSOLATOS! Keresd az MCP szervereket, klienseket, stdio/websocket kommunikációt, eszközök (tools) és erőforrások (resources) kiajánlását. Bármi, ami MCP-vel kapcsolatos agent-to-agent vagy agent-to-tool kommunikáció."
     }
 }
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 BASE_ALERTS_DIR = os.path.expanduser("~/Jules_mx/alerts")
 SCANNED_DB = os.path.expanduser("~/Jules_mx/temp/scanned_files.db")
 
@@ -56,19 +48,19 @@ def mark_scanned(filepath):
 
 def ask_llama3(prompt):
     payload = {
-        "model": "llama3",
+        "model": "qwen2.5:1.5b",
         "prompt": prompt,
         "stream": False,
         "options": {"num_predict": 150, "temperature": 0.1}
     }
     try:
-        resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=300)
         return resp.json().get("response", "")
     except Exception as e:
         return f"Error: {e}"
 
 def scout_loop():
-    print("🤖 Llama3 Scout elindult... (Multi-RAG Dinamikus Váltással, PADLÓGÁZON)")
+    print("🤖 Llama3/Qwen Scout elindult... (Multi-RAG Dinamikus Váltással, PADLÓGÁZON)")
     init_scanned_db()
 
     while True:
@@ -77,18 +69,20 @@ def scout_loop():
         for rag_name, config in DB_PATHS.items():
             db_path = config["path"]
             prompt_goal = config["prompt_goal"]
+            rag_alert_dir = os.path.join(BASE_ALERTS_DIR, rag_name)
+            os.makedirs(rag_alert_dir, exist_ok=True) # Ensure it exists during runtime
 
             if not os.path.exists(db_path):
                 print(f"⚠️ Nem található adatbázis: {db_path}")
                 continue
 
-            print(f"\\n📂 RAG Adatbázis elemzése: {db_path} (Csoport: {rag_name})")
+            print(f"\n📂 RAG Adatbázis elemzése: {db_path} (Csoport: {rag_name})")
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
             try:
-                # Szigorúan csak kód fájlok (no bloat)
-                cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.sh' OR filepath LIKE '%.asm' OR filepath LIKE '%.c' OR filepath LIKE '%.cpp' OR filepath LIKE '%.js' OR filepath LIKE '%.ts'")
+                # Szigorúan csak kód fájlok (no bloat) - TypeScript/React gyakori MCP rendszereknél
+                cursor.execute("SELECT filepath, content FROM rag_data WHERE filepath LIKE '%.py' OR filepath LIKE '%.js' OR filepath LIKE '%.ts' OR filepath LIKE '%.jsx' OR filepath LIKE '%.tsx'")
                 files = cursor.fetchall()
             except sqlite3.Error:
                 print(f"❌ Sémahiba a(z) {db_path} adatbázisban.")
@@ -107,7 +101,7 @@ def scout_loop():
             print(f"Összes fájl: {len(files)}, Ebből még nem vizsgált: {len(unscanned_files)}")
 
             batch_count = 0
-            while unscanned_files and batch_count < 2000:
+            while unscanned_files:
                 filepath, content = random.choice(unscanned_files)
                 unscanned_files.remove((filepath, content))
                 batch_count += 1
@@ -118,19 +112,21 @@ def scout_loop():
                     continue
 
                 print(f"🔍 Elemzem ({rag_name}): {filepath} ...")
-                prompt = f"""Te egy AI architecture és Python szakértő asszisztens vagy.
-A fő kutatási fókusz/kritérium ehhez az adatbázishoz: {prompt_goal}
+                prompt = f"""You are a strict AI architecture expert.
+Your research focus is EXCLUSIVELY: Model Context Protocol (MCP) implementations, clients, servers, stdio/websocket transports, or tool/resource exposure via MCP.
 
-Ez a fájl ({filepath}) tartalmazza a fent felsorolt kritériumoknak megfelelő hasznos kódot vagy logikát, amit átvehetünk egy saját Autonóm Agent be?
-Ha IGEN, válaszolj 'YES:' kezdetű sorral, majd 1-2 mondatban magyarázd el magyarul, miért hasznos a fájl.
-Ha NEM releváns (pl. GUI, adatbázis séma, teszt dummy data, frontend HTML), válaszolj 'NO'-val.
+Read the following file ({filepath}).
+STRICT RULE: You must ONLY answer with a line starting with 'YES:' if the code ACTUALLY contains MCP specific logic (e.g. MCP server setup, MCP tool calls).
+If the code is a standard API wrapper, a UI component, a database script, or DOES NOT mention MCP explicitly, YOU MUST answer with 'NO'.
+If it is MCP specific, answer 'YES:' and explain what it does in 1 sentence in Hungarian.
 
 CODE:
 {content}
 """
                 response = ask_llama3(prompt)
 
-                if response.startswith("YES:"):
+                print(f"Qwen2.5 Válasz: {response[:50]}...")
+                if response.startswith("YES:") or response.startswith("YES"):
                     print(f"🚨 ÉRDEKES LELET a {rag_name} adatbázisban! Mentés a dedikált mappába...")
                     alert = {
                         "timestamp": time.time(),
@@ -138,15 +134,14 @@ CODE:
                         "file": filepath,
                         "llama3_analysis": response
                     }
-                    safe_name = filepath.replace("/", "_").replace("\\\\", "_")
+                    safe_name = filepath.replace("/", "_").replace("\\\\", "_") + ".json"
 
-                    rag_alert_dir = os.path.join(BASE_ALERTS_DIR, rag_name)
-                    with open(os.path.join(rag_alert_dir, f"{safe_name}.json"), "w", encoding="utf-8") as f:
+                    with open(os.path.join(rag_alert_dir, safe_name), "w", encoding="utf-8") as f:
                         json.dump(alert, f, ensure_ascii=False)
 
         if all_dbs_done:
             print("🏁 Minden adatbázis minden kódját feldolgoztam! Várakozás új RAG frissítésre...")
-            time.sleep(180) # 3 percet alszik, hátha jön új fájl
+            time.sleep(10) # 10 másodpercet alszik, ha a DB kiürült
 
 if __name__ == "__main__":
     scout_loop()

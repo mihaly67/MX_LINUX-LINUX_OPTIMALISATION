@@ -6,7 +6,8 @@ import time
 
 # Chatbot RAG DB elérési útja
 DB_PATHS = {
-    "Chatbot": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db")
+    "Chatbot": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
+    "BRAIN2": os.path.expanduser("/home/misi/BRAIN2_DEV_RAG/brain2_dev_knowledge.db")
 }
 
 BASE_ALERTS_DIR = os.path.expanduser("~/Jules_mx/alerts")
@@ -26,7 +27,7 @@ if not API_KEY:
     print("CRITICAL: Nem található GEMINI_API_KEY a ~/Jules_mx/.env fájlban! Leállás.")
     exit(1)
 
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={API_KEY}"
 
 os.makedirs(BASE_ALERTS_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(SCANNED_DB), exist_ok=True)
@@ -73,7 +74,7 @@ def ask_gemini(prompt):
                     return data["candidates"][0]["content"]["parts"][0]["text"]
                 return "Nincs válasz a Geminitől."
             elif response.status_code == 429: # Too Many Requests / Quota Exceeded
-                print(f"Rate limit elérés (429)! Várakozás 60 másodpercig (Próbálkozás {attempt+1}/{max_retries})...")
+                print(f"Rate limit elérés (429)! Részletek: {response.text} | Várakozás 60 mp (Próbálkozás {attempt+1}/{max_retries})...")
                 time.sleep(60)
                 continue
             else:
@@ -138,11 +139,11 @@ Tartalom:
                 mark_scanned(filepath)
             else:
                 # API hiba, Kvóta kimerülés vagy Hálózati gond
-                print(f" [!] Elemzés sikertelen (Kvóta/Hiba). A fájl ({filepath}) nem lett megjelölve, később újrapróbáljuk.")
+                print(f" [!] Elemzés sikertelen (Kvóta/Hiba). Utolsó kapott elemzés log: {analysis[:50]}... A fájl ({filepath}) nem lett megjelölve.")
 
             # API sebességkorlát tiszteletben tartása (pl. ingyenes Gemini-1.5-flash limitje: 15 RPM. 1 perc / 15 = 4 mp várakozás fájlonként)
             # A felhasználó előfizető, de biztonságos egy minimális sleep.
-            time.sleep(1)
+            time.sleep(15)
 
 if __name__ == "__main__":
     print("🚀 Gemini Scout elindítva...")
