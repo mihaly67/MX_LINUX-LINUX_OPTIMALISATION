@@ -36,7 +36,7 @@ async def run_mcp_client(tool_name, args_dict):
         with open("temp_mcp_key", "w") as f:
             f.write(os.environ.get("VPS_SSH_KEY") + "\n")
         os.chmod("temp_mcp_key", 0o600)
-        server_params.args.extend(["-i", "temp_mcp_key"])
+        server_params.args = ["-i", "temp_mcp_key"] + server_params.args
 
     print(f"🔗 Csatlakozás a VPS MCP Szerverhez hivatalos MCP SDK-val...", file=sys.stderr)
 
