@@ -62,7 +62,92 @@ async def read_file_mcp(filepath: str) -> str:
     except Exception as e:
         return f"Hiba beolvasáskor: {str(e)}"
 
+
+@mcp.tool()
+async def git_commit_and_push(repo_path: str, commit_message: str, branch: str = "main") -> str:
+    """
+    VPS Git Menedzser: Hozzáadja a változásokat, commitol, és pushol egy adott branch-re a VPS-en lévő repóban.
+    Kiválóan alkalmas arra, hogy a lokális homokozóból irányítva a VPS autonóm módon elmentse a kódokat a GitHubra.
+    """
+    target_dir = os.path.expanduser(repo_path)
+    if not os.path.exists(target_dir):
+        return f"Hiba: A {target_dir} mappa nem létezik."
+
+    try:
+        # Git Add
+        subprocess.run(["git", "add", "."], cwd=target_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Git Commit (Ha van mit)
+        commit_res = subprocess.run(
+            ["git", "commit", "-m", commit_message],
+            cwd=target_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        # Git Push
+        push_res = subprocess.run(
+            ["git", "push", "origin", branch],
+            cwd=target_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        return f"Git művelet sikeres.\nCommit:\n{commit_res.stdout}\nPush:\n{push_res.stderr} {push_res.stdout}"
+    except subprocess.CalledProcessError as e:
+        return f"Git hiba: {e.stderr} {e.stdout}"
+
+@mcp.tool()
+async def write_file_mcp(filepath: str, content: str) -> str:
+    """Fájl írása vagy felülírása a VPS-en. Használd konfigurációk vagy kódrészletek mentésére a VPS lemezére."""
+    target_file = os.path.expanduser(filepath)
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(target_file)), exist_ok=True)
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"✅ Fájl sikeresen mentve: {target_file}"
+    except Exception as e:
+        return f"Hiba a fájl írásakor: {e}"
+
+
+import urllib.request
+from bs4 import BeautifulSoup
+
+@mcp.tool()
+async def fetch_webpage_mcp(url: str) -> str:
+    """
+    VPS Web Fetcher: Letölti egy megadott URL tartalmát a VPS-ről (így elrejti a lokális sandbox IP-jét).
+    A HTML sallangot eltávolítja, csak a tiszta szöveget adja vissza. Használható dokumentációk olvasására.
+    """
+    try:
+        req = urllib.request.Request(
+            url,
+            data=None,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            html = response.read()
+            soup = BeautifulSoup(html, 'html.parser')
+            # Kiszedjük a felesleget
+            for script in soup(["script", "style", "header", "footer", "nav", "aside"]):
+                script.decompose()
+            text = soup.get_text(separator=' ', strip=True)
+            # Tokenkímélés
+            if len(text) > 10000:
+                text = text[:10000] + "... [TRUNCATED]"
+            return text
+    except Exception as e:
+        return f"Hiba a weboldal letöltésekor: {e}"
+
 # --- RAG ÉS MEMÓRIA (ARCHIVAL & RECALL) ESZKÖZÖK ---
+
+
 
 RAG_DATABASES = {
     "Chatbot": os.path.expanduser("~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db"),
