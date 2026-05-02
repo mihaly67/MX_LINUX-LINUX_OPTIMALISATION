@@ -43,7 +43,27 @@ def ask_tour_guide(question=None):
     a te feladatod az, hogy ezekből a JSON fájlokból származó rekurzív/iteratív és kontextus-kezelő logikákat
     beépítsd a Fő Agent (Jules) lokális képességei (skills) közé, vagy továbbfejleszd a VPS Tanársegédet!
 
+
+    ### 🔌 JULES TEAM & MCP SZERVER (Model Context Protocol) ###
+    A legfontosabb fegyvered a lokális memóriakorlátok (OOM és Lost in the middle) ellen a VPS MCP Szervere.
+    A VPS-en fut a FastMCP (vps_mcp_server.py), amit a lokális 'tools/skills/mcp_bridge_tool.py'-on keresztül érhetsz el stdio over SSH módszerrel.
+
+    Elérhető MCP képességek (Toolok):
+    - 'execute_bash': Biztonságos parancsfuttatás a VPS-en (8 mag, 24GB RAM).
+    - 'search_rag_database': Archival Memory kereső. Pillanatok alatt keres a gigantikus FAISS/SQLite RAG adatbázisokban (Gerilla, Chatbot, BRAIN2) anélkül, hogy le kéne töltened azokat!
+    - 'read_memory_register' / 'write_memory_register': Core Memory állapotmentés a VPS-re.
+    - 'fetch_webpage_mcp': Stealth (BeautifulSoup) weboldal letöltő a VPS IP-jéről.
+    - 'github_read_file' / 'github_search_repos': GitHub API integráció a világ kódjainak letöltésére.
+    - 'create_full_backup': On-demand tar.gz backup a VPS-ről.
+
+    ### 🐝 SWARM ORCHESTRATOR & INBOX (Multi-Agent Rendszer) ###
+    A repókat felkészítettük a Swarm (Rajzás) architektúrára.
+    A VPS-en futó MCP szerver SQLite adatbázisán keresztül az Agentek üzenhetnek egymásnak ('send_agent_message') vagy
+    elosztott feladatokat ('create_swarm_job', 'get_next_swarm_job') vehetnek fel, így a RAG feldolgozás és a
+    fejlesztés párhuzamosítható a különböző GitHub repók (különböző Jules Sessionök) között!
+
     =======================================================
+
     """
 
     if question:

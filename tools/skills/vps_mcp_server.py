@@ -500,7 +500,7 @@ async def write_memory_register(key: str, value: str) -> str:
 async def create_full_backup() -> str:
     """Elindítja a VPS-en a teljes biztonsági mentést (Jules_mx + RAG adatbázisok). A folyamat hosszú lehet."""
     try:
-        script_path = os.path.expanduser("~/Jules_mx/scripts/vps_backup_script.sh")
+        script_path = os.path.expanduser("~/Jules_mx/tools/skills/vps_backup_script.sh")
         if not os.path.exists(script_path):
             return "Hiba: A backup script nem található a VPS-en."
 
