@@ -18,7 +18,7 @@ async def run_mcp_client(tool_name, args_dict):
         command="ssh",
         args=[
             "-o", "StrictHostKeyChecking=no",
-            "misi@5.189.163.88",
+            f"misi@{os.environ.get('VPS_HOST', '5.189.163.88')}",
             "/home/misi/Jules_mx/venv/bin/python3",
             "/home/misi/Jules_mx/scripts/vps_mcp_server.py"
         ],
