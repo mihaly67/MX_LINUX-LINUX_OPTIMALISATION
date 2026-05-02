@@ -156,7 +156,163 @@ async def fetch_webpage_mcp(url: str) -> str:
         return f"Hiba a weboldal letöltésekor: {e}"
 
 
+
+# --- JULES TEAM (MULTI-AGENT INBOX) ---
+
+INBOX_DB = os.path.expanduser("~/Jules_mx/temp/jules_team_inbox.db")
+
+def init_inbox():
+    conn = sqlite3.connect(INBOX_DB)
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sender TEXT,
+                        target TEXT,
+                        message TEXT,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        is_read INTEGER DEFAULT 0
+                    )''')
+    conn.commit()
+    conn.close()
+
+@mcp.tool()
+async def send_agent_message(sender: str, target: str, message: str) -> str:
+    """
+    Jules Team: Üzenetet vagy feladatot küld egy másik Agentnek a VPS postaládáján keresztül.
+    Példa: sender='Fő_Agent', target='EA_Jules', message='Nézd meg a MQL5_Theory mappát!'
+    """
+    init_inbox()
+    try:
+        conn = sqlite3.connect(INBOX_DB)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO messages (sender, target, message) VALUES (?, ?, ?)", (sender, target, message))
+        conn.commit()
+        conn.close()
+        return f"✅ Üzenet sikeresen elküldve a következőnek: {target}"
+    except Exception as e:
+        return f"Hiba az üzenet küldésekor: {e}"
+
+@mcp.tool()
+async def check_agent_messages(agent_name: str) -> str:
+    """
+    Jules Team: Lekérdezi az adott Agentnek (pl. 'EA_Jules' vagy 'Fő_Agent') címzett OLVASATLAN üzeneteket a VPS-ről.
+    Lekérdezés után automatikusan olvasottá nyilvánítja őket.
+    """
+    init_inbox()
+    try:
+        conn = sqlite3.connect(INBOX_DB)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, sender, timestamp, message FROM messages WHERE target = ? AND is_read = 0", (agent_name,))
+        rows = cursor.fetchall()
+
+        if not rows:
+            conn.close()
+            return f"📭 Nincs új olvasatlan üzenet a következőnek: {agent_name}"
+
+        output = f"📬 {len(rows)} új üzenet érkezett a következőnek: {agent_name}\n\n"
+        ids_to_mark = []
+        for r in rows:
+            output += f"[{r[2]}] Feladó: {r[1]}\nÜzenet: {r[3]}\n" + "-"*30 + "\n"
+            ids_to_mark.append(str(r[0]))
+
+        # Olvasottra állítás
+        cursor.execute(f"UPDATE messages SET is_read = 1 WHERE id IN ({','.join(ids_to_mark)})")
+        conn.commit()
+        conn.close()
+        return output
+    except Exception as e:
+        return f"Hiba az üzenetek lekérdezésekor: {e}"
+
+
+# --- JULES SWARM (ELOSZTOTT FELADATKIOSZTÁS) ---
+
+SWARM_DB = os.path.expanduser("~/Jules_mx/temp/jules_swarm_jobs.db")
+
+def init_swarm_db():
+    conn = sqlite3.connect(SWARM_DB)
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_type TEXT,
+                        target_repo TEXT,
+                        instruction TEXT,
+                        status TEXT DEFAULT 'PENDING',
+                        assigned_to TEXT,
+                        result TEXT,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )''')
+    conn.commit()
+    conn.close()
+
+@mcp.tool()
+async def create_swarm_job(job_type: str, target_repo: str, instruction: str) -> str:
+    """
+    Létrehoz egy elosztott feladatot a Jules Team számára a felhőben.
+    Bármely szabad Agent felveheti és végrehajthatja a saját homokozójában.
+    """
+    init_swarm_db()
+    try:
+        conn = sqlite3.connect(SWARM_DB)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", (job_type, target_repo, instruction))
+        conn.commit()
+        conn.close()
+        return f"✅ Feladat sikeresen létrehozva a Swarm hálózatban a {target_repo} repóhoz."
+    except Exception as e:
+        return f"Hiba a feladat létrehozásakor: {e}"
+
+@mcp.tool()
+async def get_next_swarm_job(agent_id: str) -> str:
+    """
+    Lekérdezi és lefoglalja a következő szabad (PENDING) feladatot a Swarm hálózatból.
+    Az agent_id lehet a repo neve vagy a session azonosítója (pl. 'Jules_EA_Fejlesztes').
+    """
+    init_swarm_db()
+    try:
+        conn = sqlite3.connect(SWARM_DB)
+        cursor = conn.cursor()
+        # Keresünk egy PENDING feladatot
+        cursor.execute("SELECT id, job_type, target_repo, instruction FROM jobs WHERE status = 'PENDING' ORDER BY timestamp ASC LIMIT 1")
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            return "📭 Nincs jelenleg kiosztható feladat a Swarm hálózatban."
+
+        job_id = row[0]
+        # Lefoglaljuk a feladatot
+        cursor.execute("UPDATE jobs SET status = 'IN_PROGRESS', assigned_to = ? WHERE id = ?", (agent_id, job_id))
+        conn.commit()
+        conn.close()
+
+        return json.dumps({
+            "job_id": job_id,
+            "job_type": row[1],
+            "target_repo": row[2],
+            "instruction": row[3]
+        }, ensure_ascii=False)
+    except Exception as e:
+        return f"Hiba a feladat lekérdezésekor: {e}"
+
+@mcp.tool()
+async def complete_swarm_job(job_id: int, result: str) -> str:
+    """
+    Jelenti a felhőnek, hogy egy feladat sikeresen befejeződött, és elmenti az eredményt.
+    """
+    init_swarm_db()
+    try:
+        conn = sqlite3.connect(SWARM_DB)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE jobs SET status = 'COMPLETED', result = ? WHERE id = ?", (result, job_id))
+        conn.commit()
+        conn.close()
+        return f"✅ A {job_id} azonosítójú feladat sikeresen lezárva a Swarmban."
+    except Exception as e:
+        return f"Hiba a feladat lezárásakor: {e}"
+
 # --- GITHUB SCOUT (MINI-ÁGENS) ---
+
+
 
 @mcp.tool()
 async def github_list_user_repos(username: str) -> str:
