@@ -406,7 +406,38 @@ async def github_read_file(owner: str, repo: str, file_path: str, branch: str = 
     except Exception as e:
         return f"Hiba a fájl letöltésekor: {e}"
 
+
+@mcp.tool()
+async def execute_python(code: str) -> str:
+    """
+    VPS Code Interpreter: Futtat egy Python kódrészletet (snippetet) egy eldobható, biztonságos környezetben a VPS-en.
+    Hasznos adatelemzéshez, matematikai számításokhoz vagy gyors logikai tesztekhez.
+    """
+    # Létrehozunk egy átmeneti fájlt a kódnak
+    temp_file = os.path.expanduser("~/Jules_mx/temp/interpreter_script.py")
+    try:
+        os.makedirs(os.path.dirname(temp_file), exist_ok=True)
+        with open(temp_file, "w", encoding="utf-8") as f:
+            f.write(code)
+
+        # Lefuttatjuk a virtuális környezet Pythonjával (5 másodperces timeout a végtelen ciklusok ellen)
+        result = subprocess.run(
+            ["/home/misi/Jules_mx/venv/bin/python3", temp_file],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+            cwd=os.path.expanduser("~/Jules_mx/")
+        )
+        return f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    except subprocess.TimeoutExpired:
+        return "Hiba: A Python szkript futása időtúllépés miatt megszakítva (végtelen ciklus?)."
+    except Exception as e:
+        return f"Kritikus hiba a futtatáskor: {e}"
+
 # --- RAG ÉS MEMÓRIA (ARCHIVAL & RECALL) ESZKÖZÖK ---
+
 
 
 
