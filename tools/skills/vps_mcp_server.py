@@ -16,6 +16,16 @@ import requests
 import anyio
 from mcp.server.fastmcp import FastMCP
 
+# Próbáljuk betölteni a környezeti változókat a VPS ~/.env fájljából
+env_file = os.path.expanduser("~/Jules_mx/.env")
+if os.path.exists(env_file):
+    with open(env_file, "r") as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                key, val = line.strip().split("=", 1)
+                os.environ[key] = val
+
+
 # Létrehozunk egy MCP szervert
 mcp = FastMCP("Jules VPS MCP")
 
@@ -145,7 +155,103 @@ async def fetch_webpage_mcp(url: str) -> str:
     except Exception as e:
         return f"Hiba a weboldal letöltésekor: {e}"
 
+
+# --- GITHUB SCOUT (MINI-ÁGENS) ---
+
+@mcp.tool()
+async def github_list_user_repos(username: str) -> str:
+    """
+    Kilistázza egy adott GitHub felhasználó (pl. 'mihaly67') publikus repóit.
+    Ha a VPS ~/.env fájljában van GITHUB_TOKEN, akkor a privátokat is látja.
+    """
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    try:
+        # User repói
+        url = f"https://api.github.com/users/{username}/repos?sort=updated&per_page=100"
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            return f"GitHub API Hiba: {response.status_code} - {response.text}"
+
+        repos = response.json()
+        if not repos:
+            return f"Nincs repo a '{username}' felhasználóhoz."
+
+        result = f"📂 {username} GitHub Repói ({len(repos)} db):\n"
+        for r in repos:
+            priv = "🔒 Privát" if r.get("private") else "🌍 Publikus"
+            result += f"- {r['name']} ({priv}) | 🌟 {r.get('stargazers_count', 0)} | 🔄 {r.get('updated_at')}\n"
+
+        return result
+    except Exception as e:
+        return f"Hiba a GitHub lekérdezéskor: {e}"
+
+@mcp.tool()
+async def github_search_repos(query: str, limit: int = 5) -> str:
+    """Keres a teljes nyílt GitHub-on repókat egy kulcsszó vagy kifejezés (pl. 'MCP server python') alapján."""
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    try:
+        url = f"https://api.github.com/search/repositories?q={query}&sort=stars&order=desc&per_page={limit}"
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            return f"GitHub API Hiba: {response.status_code} - {response.text}"
+
+        data = response.json()
+        items = data.get("items", [])
+        if not items:
+            return f"Nincs találat a '{query}' keresésre."
+
+        result = f"🔍 Top {len(items)} GitHub találat a '{query}' szóra:\n\n"
+        for r in items:
+            result += f"📦 Repo: {r['full_name']}\n"
+            result += f"🌟 Csillagok: {r.get('stargazers_count', 0)}\n"
+            result += f"📝 Leírás: {r.get('description', 'Nincs leírás')}\n"
+            result += f"🔗 URL: {r.get('html_url')}\n"
+            result += "-" * 40 + "\n"
+
+        return result
+    except Exception as e:
+        return f"Hiba a GitHub lekérdezéskor: {e}"
+
+@mcp.tool()
+async def github_read_file(owner: str, repo: str, file_path: str, branch: str = "main") -> str:
+    """
+    Letölti és beolvassa egy konkrét fájl tartalmát a GitHub-ról anélkül, hogy le kellene klónozni a repót!
+    Példa: owner='mihaly67', repo='MX_LINUX-LINUX_OPTIMALISATION', file_path='README.md'
+    """
+    headers = {"Accept": "application/vnd.github.v3.raw"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    try:
+        url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_path}?ref={branch}"
+        response = requests.get(url, headers=headers, timeout=10)
+
+        if response.status_code == 404:
+            return f"Hiba: A fájl nem található: {file_path} a {branch} branchen."
+        elif response.status_code != 200:
+            return f"GitHub API Hiba: {response.status_code} - {response.text}"
+
+        content = response.text
+        if len(content) > 15000:
+            return content[:15000] + "\n\n... [TRUNCATED - A fájl túl hosszú a teljes megjelenítéshez]"
+
+        return content
+    except Exception as e:
+        return f"Hiba a fájl letöltésekor: {e}"
+
 # --- RAG ÉS MEMÓRIA (ARCHIVAL & RECALL) ESZKÖZÖK ---
+
 
 
 
