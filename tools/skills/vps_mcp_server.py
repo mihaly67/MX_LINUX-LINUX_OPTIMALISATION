@@ -148,6 +148,26 @@ async def write_memory_register(key: str, value: str) -> str:
     except Exception as e:
         return f"Hiba a memória mentésekor: {e}"
 
+
+@mcp.tool()
+async def create_full_backup() -> str:
+    """Elindítja a VPS-en a teljes biztonsági mentést (Jules_mx + RAG adatbázisok). A folyamat hosszú lehet."""
+    try:
+        script_path = os.path.expanduser("~/Jules_mx/scripts/vps_backup_script.sh")
+        if not os.path.exists(script_path):
+            return "Hiba: A backup script nem található a VPS-en."
+
+        result = subprocess.run(
+            ["bash", script_path],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return f"Mentés sikeres:\n{result.stdout}"
+    except subprocess.CalledProcessError as e:
+        return f"Hiba a mentés során: {e.stderr}"
+
 def main():
     """Futtatja a szervert stdio módban."""
     print("🚀 Jules VPS MCP Szerver elindítva (stdio módban).", file=sys.stderr)
