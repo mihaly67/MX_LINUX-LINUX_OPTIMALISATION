@@ -436,60 +436,7 @@ async def execute_python(code: str) -> str:
     except Exception as e:
         return f"Kritikus hiba a futtatáskor: {e}"
 
-
-# --- VPS ERŐFORRÁS ÉS ÜTEMEZŐ (SCHEDULER) ESZKÖZÖK ---
-
-@mcp.tool()
-async def schedule_background_task(command: str, job_name: str) -> str:
-    """
-    Központi Feladatütemező: Aszinkron módon elindít egy háttérfolyamatot (bash command) a VPS-en.
-    Hasznos hosszú lefolyású RAG darálások, Swarm jobok vagy mentések elindításához,
-    anélkül, hogy az MCP kapcsolat blokkolódna. A kimenetet egy log fájlba irányítja.
-    """
-    log_dir = os.path.expanduser("~/Jules_mx/temp/scheduler_logs")
-    os.makedirs(log_dir, exist_ok=True)
-
-    log_file = os.path.join(log_dir, f"{job_name.replace(' ', '_')}.log")
-
-    # Körbevéve nohup-al, hogy a folyamat túlélje az MCP szerver leállását
-    full_command = f"nohup {command} > {log_file} 2>&1 & echo $!"
-
-    try:
-        process = subprocess.Popen(
-            full_command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=os.path.expanduser("~/Jules_mx/")
-        )
-        pid, _ = process.communicate()
-        return f"✅ '{job_name}' háttérfolyamat elindítva.\nPID: {pid.strip()}\nLog fájl: {log_file}"
-    except Exception as e:
-        return f"Hiba a feladat ütemezésekor: {e}"
-
-@mcp.tool()
-async def check_vps_resources() -> str:
-    """
-    VPS Erőforrás-Figyelő: Lekérdezi a VPS aktuális CPU, RAM és SWAP használatát.
-    Kötelező használni a 'Szabad Kéz' protokoll alapján minden nehéz (RAG, Swarm, Code execution) feladat indítása előtt,
-    hogy elkerüljük az Ubuntu szerver OOM (Out Of Memory) összeomlását.
-    """
-    try:
-        # Memória információk
-        mem_res = subprocess.run(["free", "-m"], capture_output=True, text=True)
-        # CPU Load (1, 5, 15 perc)
-        load_res = subprocess.run(["uptime"], capture_output=True, text=True)
-        # Aktív és legtöbb erőforrást fogyasztó folyamatok (Top 3)
-        top_res = subprocess.run(["ps", "-eo", "pid,ppid,cmd,%mem,%cpu", "--sort=-%mem"], capture_output=True, text=True)
-        top_lines = "\n".join(top_res.stdout.split("\n")[:4])
-
-        return f"🖥️ VPS ERŐFORRÁS JELENTÉS:\n\nTERHELÉS (Load Average):\n{load_res.stdout.strip()}\n\nMEMÓRIA (MB):\n{mem_res.stdout.strip()}\n\nTOP FOLYAMATOK:\n{top_lines}"
-    except Exception as e:
-        return f"Hiba az erőforrások lekérdezésekor: {e}"
-
 # --- RAG ÉS MEMÓRIA (ARCHIVAL & RECALL) ESZKÖZÖK ---
-
 
 
 
