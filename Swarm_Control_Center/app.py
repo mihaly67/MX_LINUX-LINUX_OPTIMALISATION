@@ -1,3 +1,8 @@
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+import sqlite3
+import os
+import uvicorn
 import uuid
 from typing import Optional
 
@@ -29,14 +34,23 @@ async def read_root(request: Request):
         health_data = []
 
     try:
-        # 1. Fetch the latest 50 messages descending so we get the correct subset
+        # Fetch the latest 50 messages
         cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 50", (session_id,))
         chat_data = cursor.fetchall()
-        # 2. Reverse the list so the oldest of those 50 is at the top, newest at bottom
         chat_data.reverse()
     except Exception as e:
         print(e)
         chat_data = []
+
+    # Ezzel ellenorizzuk hogy Jules epp dolgozik-e egy CHAT feladaton
+    is_thinking = False
+    try:
+        cursor.execute("SELECT status FROM jobs WHERE job_type = 'CHAT' AND target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
+        active_job = cursor.fetchone()
+        if active_job:
+            is_thinking = True
+    except Exception as e:
+        print(e)
 
     conn.close()
 
@@ -59,8 +73,22 @@ async def read_root(request: Request):
             .btn-primary {{ background-color: #6366f1; border: none; }}
             .btn-primary:hover {{ background-color: #4f46e5; }}
             input, select, textarea {{ background-color: #151520 !important; color: white !important; border: 1px solid #4a4a6a !important; }}
-            /* Ensure text wraps in chat bubbles */
             .chat-badge {{ white-space: pre-wrap; word-break: break-word; text-align: left; display: inline-block; max-width: 80%; padding: 10px; }}
+            .typing-indicator span {{
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                background-color: #a5b4fc;
+                border-radius: 50%;
+                margin: 0 2px;
+                animation: typing 1.4s infinite ease-in-out both;
+            }}
+            .typing-indicator span:nth-child(1) {{ animation-delay: -0.32s; }}
+            .typing-indicator span:nth-child(2) {{ animation-delay: -0.16s; }}
+            @keyframes typing {{
+                0%, 80%, 100% {{ transform: scale(0); }}
+                40% {{ transform: scale(1); }}
+            }}
         </style>
     </head>
     <body>
@@ -130,6 +158,16 @@ async def read_root(request: Request):
             else:
                 html += f"<div class='mb-3 text-start'><small class='text-muted'>{tstamp} - <strong>{agent}</strong></small><br><div class='badge bg-secondary fs-6 chat-badge'>{msg}</div></div>"
 
+    if is_thinking:
+        html += """
+            <div class='mb-3 text-start' id='thinking-indicator'>
+                <small class='text-muted'>Éppen most - <strong>Jules_mx</strong></small><br>
+                <div class='badge bg-secondary fs-6 chat-badge typing-indicator'>
+                    Gondolkodik <span></span><span></span><span></span>
+                </div>
+            </div>
+        """
+
     html += """
                         </div>
 
@@ -159,6 +197,18 @@ async def read_root(request: Request):
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
         });
+
+        // Auto-refresh the page every 5 seconds only if Jules is currently thinking, so we get the answer automatically
+    """
+
+    if is_thinking:
+        html += """
+        setTimeout(function() {
+            window.location.reload(1);
+        }, 5000);
+        """
+
+    html += """
     </script>
     </body>
     </html>
