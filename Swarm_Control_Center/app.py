@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import sqlite3
 import os
 import uvicorn
+import uuid
+from typing import Optional
 import uuid
 from typing import Optional
 
@@ -16,6 +18,58 @@ def get_db_connection():
 
 def get_session_id(request: Request):
     return request.cookies.get("session_id")
+
+@app.get("/chat_history", response_class=JSONResponse)
+async def get_chat_history(request: Request):
+    session_id = get_session_id(request)
+    if not session_id:
+        return {"html": "<div class='text-muted text-center my-auto'>Nincsenek üzenetek.</div>", "is_thinking": False}
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Fetch the latest 50 messages
+        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 50", (session_id,))
+        chat_data = cursor.fetchall()
+        chat_data.reverse()
+    except Exception as e:
+        print(e)
+        chat_data = []
+
+    is_thinking = False
+    try:
+        cursor.execute("SELECT status FROM jobs WHERE job_type = 'CHAT' AND target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
+        active_job = cursor.fetchone()
+        if active_job:
+            is_thinking = True
+    except Exception as e:
+        print(e)
+
+    conn.close()
+
+    html = ""
+    if not chat_data:
+        html += "<div class='text-muted text-center my-auto'>Nincsenek még üzenetek ebben a sessionben.</div>"
+    else:
+        for chat in chat_data:
+            sender, agent, msg, tstamp = chat
+            if sender == 'USER':
+                html += f"<div class='mb-3 text-end'><small class='text-muted'>{tstamp}</small><br><div class='badge bg-primary fs-6 chat-badge'>{msg}</div></div>"
+            else:
+                html += f"<div class='mb-3 text-start'><small class='text-muted'>{tstamp} - <strong>{agent}</strong></small><br><div class='badge bg-secondary fs-6 chat-badge'>{msg}</div></div>"
+
+    if is_thinking:
+        html += """
+            <div class='mb-3 text-start' id='thinking-indicator'>
+                <small class='text-muted'>Éppen most - <strong>Jules_mx</strong></small><br>
+                <div class='badge bg-secondary fs-6 chat-badge typing-indicator'>
+                    Dolgozom <span></span><span></span><span></span>
+                </div>
+            </div>
+        """
+
+    return {"html": html, "is_thinking": is_thinking}
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -32,25 +86,6 @@ async def read_root(request: Request):
     except Exception as e:
         print(e)
         health_data = []
-
-    try:
-        # Fetch the latest 50 messages
-        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 50", (session_id,))
-        chat_data = cursor.fetchall()
-        chat_data.reverse()
-    except Exception as e:
-        print(e)
-        chat_data = []
-
-    # Ezzel ellenorizzuk hogy Jules epp dolgozik-e egy CHAT feladaton
-    is_thinking = False
-    try:
-        cursor.execute("SELECT status FROM jobs WHERE job_type = 'CHAT' AND target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
-        active_job = cursor.fetchone()
-        if active_job:
-            is_thinking = True
-    except Exception as e:
-        print(e)
 
     conn.close()
 
@@ -145,40 +180,19 @@ async def read_root(request: Request):
                         <span>💬 Jules Chat (Session: {session_id})</span>
                     </div>
                     <div class="card-body">
-                        <div class="chat-box mb-3" style="height: 400px; overflow-y: auto; background-color: #151520; padding: 15px; border-radius: 5px; border: 1px solid #4a4a6a; display: flex; flex-direction: column;">
-    """
-
-    if not chat_data:
-        html += "<div class='text-muted text-center my-auto'>Nincsenek még üzenetek ebben a sessionben.</div>"
-    else:
-        for chat in chat_data:
-            sender, agent, msg, tstamp = chat
-            if sender == 'USER':
-                html += f"<div class='mb-3 text-end'><small class='text-muted'>{tstamp}</small><br><div class='badge bg-primary fs-6 chat-badge'>{msg}</div></div>"
-            else:
-                html += f"<div class='mb-3 text-start'><small class='text-muted'>{tstamp} - <strong>{agent}</strong></small><br><div class='badge bg-secondary fs-6 chat-badge'>{msg}</div></div>"
-
-    if is_thinking:
-        html += """
-            <div class='mb-3 text-start' id='thinking-indicator'>
-                <small class='text-muted'>Éppen most - <strong>Jules_mx</strong></small><br>
-                <div class='badge bg-secondary fs-6 chat-badge typing-indicator'>
-                    Gondolkodik <span></span><span></span><span></span>
-                </div>
-            </div>
-        """
-
-    html += """
+                        <!-- Betolteskor ures, majd a JS Ajax tolti ki -->
+                        <div id="chat-content" class="chat-box mb-3" style="height: 400px; overflow-y: auto; background-color: #151520; padding: 15px; border-radius: 5px; border: 1px solid #4a4a6a; display: flex; flex-direction: column;">
+                            <div class='text-muted text-center my-auto'>Betöltés...</div>
                         </div>
 
-                        <form action="/send_message" method="POST">
+                        <form id="chat-form" action="/send_message" method="POST">
                             <input type="hidden" name="agent_id" value="Jules_mx">
                             <div class="row align-items-end">
                                 <div class="col-md-10">
-                                    <textarea class="form-control" name="message" placeholder="Írj üzenetet a Fő Agentnek..." rows="4" style="resize: vertical;" required></textarea>
+                                    <textarea class="form-control" name="message" id="message_input" placeholder="Írj üzenetet a Fő Agentnek..." rows="4" style="resize: vertical;" required></textarea>
                                 </div>
                                 <div class="col-md-2">
-                                    <button type="submit" class="btn btn-primary w-100 h-100">Küldés</button>
+                                    <button type="submit" id="send_button" class="btn btn-primary w-100 h-100">Küldés</button>
                                 </div>
                             </div>
                         </form>
@@ -190,25 +204,61 @@ async def read_root(request: Request):
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Scroll to bottom of chat box on load
-        document.addEventListener("DOMContentLoaded", function() {
-            var chatBox = document.querySelector('.chat-box');
-            if (chatBox) {
-                chatBox.scrollTop = chatBox.scrollHeight;
-            }
+        // Ajax alapu Chat frissites
+        var chatContent = document.getElementById('chat-content');
+        var isThinking = false;
+        var needsScroll = true; // Elso betoltesnel gorgetunk
+
+        function fetchChat() {
+            fetch('/chat_history')
+                .then(response => response.json())
+                .then(data => {
+                    var oldHtml = chatContent.innerHTML;
+                    if (oldHtml !== data.html) {
+                        // Ellenorizzuk hogy a felhasznalo a doboz aljan van-e gorgetve
+                        // Vagy ha epp most kuldott uzenetet
+                        var isAtBottom = (chatContent.scrollHeight - chatContent.scrollTop) <= chatContent.clientHeight + 50;
+
+                        chatContent.innerHTML = data.html;
+                        isThinking = data.is_thinking;
+
+                        // Csak akkor gorgetunk az aljara, ha eddig is ott voltunk (nem zavarjuk meg a gorgetest)
+                        if (isAtBottom || needsScroll) {
+                            chatContent.scrollTop = chatContent.scrollHeight;
+                            needsScroll = false;
+                        }
+                    }
+                })
+                .catch(error => console.error('Hiba tortent:', error));
+        }
+
+        // 3 masodpercenkent kerdezzuk le csendben a hatterben
+        setInterval(fetchChat, 3000);
+
+        // Form kuldeset is megfogjuk es AJAX-szal kuldjuk el, igy soha nem toltodik ujra az oldal
+        document.getElementById('chat-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var messageInput = document.getElementById('message_input');
+            var formData = new FormData(this);
+            var btn = document.getElementById('send_button');
+
+            btn.disabled = true;
+
+            fetch('/send_message', {
+                method: 'POST',
+                body: formData
+            }).then(() => {
+                messageInput.value = '';
+                btn.disabled = false;
+                needsScroll = true; // Kuldunk, szoval kenyszeritsuk a gorgetest az aljara
+                fetchChat(); // Azonnal frissitunk
+            }).catch(() => {
+                btn.disabled = false;
+            });
         });
 
-        // Auto-refresh the page every 5 seconds only if Jules is currently thinking, so we get the answer automatically
-    """
-
-    if is_thinking:
-        html += """
-        setTimeout(function() {
-            window.location.reload(1);
-        }, 5000);
-        """
-
-    html += """
+        // Elsore is azonnal lefuttatjuk
+        fetchChat();
     </script>
     </body>
     </html>
@@ -223,7 +273,7 @@ async def read_root(request: Request):
 async def send_message(request: Request, agent_id: str = Form(...), message: str = Form(...)):
     session_id = get_session_id(request)
     if not session_id:
-        return RedirectResponse(url="/", status_code=303)
+        return {"status": "error"}
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -235,7 +285,7 @@ async def send_message(request: Request, agent_id: str = Form(...), message: str
 
     conn.commit()
     conn.close()
-    return RedirectResponse(url="/", status_code=303)
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
