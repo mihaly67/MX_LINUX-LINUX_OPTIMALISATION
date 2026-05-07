@@ -25,11 +25,10 @@ def init_db_if_needed():
     c.execute('''CREATE TABLE IF NOT EXISTS chat_messages
                  (id INTEGER PRIMARY KEY, session_id TEXT, sender TEXT, agent_id TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS jobs
-                 (id INTEGER PRIMARY KEY, job_type TEXT, target_repo TEXT, payload TEXT, status TEXT, created_at DATETIME, completed_at DATETIME, result TEXT, priority INTEGER)''')
+                 (id INTEGER PRIMARY KEY, job_type TEXT, target_repo TEXT, instruction TEXT, status TEXT DEFAULT 'PENDING', assigned_to TEXT, result TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
 
-# Ensure DB exists
 init_db_if_needed()
 
 def get_session_id(request: Request):
@@ -45,25 +44,22 @@ async def get_chat_history(request: Request):
     cursor = conn.cursor()
 
     try:
-        # Fetch the latest 50 messages
-        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 50", (session_id,))
+        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages ORDER BY timestamp DESC LIMIT 50")
         chat_data = cursor.fetchall()
         chat_data.reverse()
     except Exception as e:
-        print(e)
         chat_data = []
 
     is_thinking = False
     status_text = ""
     try:
-        # Check active jobs specifically for the main agent
         cursor.execute("SELECT status, job_type FROM jobs WHERE target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
         active_job = cursor.fetchone()
         if active_job:
             is_thinking = True
             status_text = f"{active_job[1]} ({active_job[0]})"
     except Exception as e:
-        print(e)
+        pass
 
     conn.close()
 
@@ -75,7 +71,6 @@ async def get_chat_history(request: Request):
             sender = row[0]
             msg = row[2]
             ts = row[3][11:19] if row[3] else ""
-
             if sender == 'USER':
                 html += f"<div class='mb-2 text-start'><span class='text-success fw-bold'>[{ts}] KARMESTER:</span> <span class='text-light'>{msg}</span></div>"
             else:
@@ -90,7 +85,7 @@ async def read_root(request: Request):
     if not session_id:
         session_id = str(uuid.uuid4())
 
-    html = f"""
+    html_part_1 = f"""
     <!DOCTYPE html>
     <html lang="hu">
     <head>
@@ -99,30 +94,9 @@ async def read_root(request: Request):
         <title>Jules Swarm Control Center (Web TUI)</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
-            body {{
-                background-color: #0d1117;
-                color: #c9d1d9;
-                font-family: 'Courier New', Courier, monospace; /* Terminal font */
-                margin: 0;
-                padding: 10px;
-                height: 100vh;
-                display: flex;
-                flex-direction: column;
-            }}
-            .card {{
-                background-color: #161b22;
-                border: 1px solid #30363d;
-                margin-bottom: 10px;
-                flex-grow: 1;
-                display: flex;
-                flex-direction: column;
-            }}
-            .card-header {{
-                background-color: #21262d;
-                font-weight: bold;
-                border-bottom: 1px solid #30363d;
-                color: #58a6ff;
-            }}
+            body {{ background-color: #0d1117; color: #c9d1d9; font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; height: 100vh; display: flex; flex-direction: column; }}
+            .card {{ background-color: #161b22; border: 1px solid #30363d; margin-bottom: 10px; flex-grow: 1; display: flex; flex-direction: column; }}
+            .card-header {{ background-color: #21262d; font-weight: bold; border-bottom: 1px solid #30363d; color: #58a6ff; }}
             .text-success {{ color: #3fb950 !important; }}
             .text-info {{ color: #58a6ff !important; }}
             .text-warning {{ color: #d29922 !important; }}
@@ -130,32 +104,11 @@ async def read_root(request: Request):
             .btn-primary {{ background-color: #238636; border: none; color: #ffffff; font-weight: bold; }}
             .btn-primary:hover {{ background-color: #2ea043; }}
             .btn-warning {{ background-color: #d29922; border: none; color: #ffffff; font-weight: bold; margin-left: 5px; }}
-            input, select, textarea {{
-                background-color: #0d1117 !important;
-                color: #c9d1d9 !important;
-                border: 1px solid #30363d !important;
-                font-family: 'Courier New', Courier, monospace;
-            }}
-            input:focus, textarea:focus {{
-                border-color: #58a6ff !important;
-                box-shadow: 0 0 0 0.2rem rgba(88, 166, 255, 0.25) !important;
-            }}
-
-            #chat-content {{
-                flex-grow: 1;
-                overflow-y: auto;
-                background-color: #0d1117;
-                padding: 15px;
-                border-radius: 5px;
-                border: 1px solid #30363d;
-            }}
-
-            .blink {{
-                animation: blinker 1.5s linear infinite;
-            }}
-            @keyframes blinker {{
-                50% {{ opacity: 0; }}
-            }}
+            input, select, textarea {{ background-color: #0d1117 !important; color: #c9d1d9 !important; border: 1px solid #30363d !important; font-family: 'Courier New', Courier, monospace; }}
+            input:focus, textarea:focus {{ border-color: #58a6ff !important; box-shadow: 0 0 0 0.2rem rgba(88, 166, 255, 0.25) !important; }}
+            #chat-content {{ flex-grow: 1; overflow-y: auto; background-color: #0d1117; padding: 15px; border-radius: 5px; border: 1px solid #30363d; }}
+            .blink {{ animation: blinker 1.5s linear infinite; }}
+            @keyframes blinker {{ 50% {{ opacity: 0; }} }}
         </style>
     </head>
     <body>
@@ -165,15 +118,12 @@ async def read_root(request: Request):
                 <span id="status-indicator" class="text-secondary fw-bold">✅ IDLE</span>
             </div>
             <div class="card-body d-flex flex-direction-column" style="flex-direction: column; padding-bottom: 5px;">
-                <!-- Chat Output -->
                 <div id="chat-content" class="mb-3">
                     <div class='text-muted text-center my-auto'>Rendszer indítása...</div>
                 </div>
-
-                <!-- Input Form -->
                 <form id="chat-form" action="/send_message" method="POST" style="margin-bottom: 0;">
                     <div class="d-flex">
-                        <textarea class="form-control me-2" name="message" id="message_input" placeholder="Parancs vagy üzenet... (vagy használd a PUSH gombot)" rows="2" style="resize: none;" required></textarea>
+                        <textarea class="form-control me-2" name="message" id="message_input" placeholder="Parancs vagy üzenet... (vagy PUSH gomb)" rows="2" style="resize: vertical; overflow-y: auto;" required></textarea>
                         <div class="d-flex flex-column justify-content-between">
                             <button type="submit" id="send_button" class="btn btn-primary mb-1">KÜLDÉS</button>
                             <button type="button" id="push_button" class="btn btn-warning">GITHUB PUSH</button>
@@ -182,7 +132,9 @@ async def read_root(request: Request):
                 </form>
             </div>
         </div>
+    """
 
+    html_part_2 = """
     <script>
         var chatContent = document.getElementById('chat-content');
         var statusIndicator = document.getElementById('status-indicator');
@@ -197,13 +149,11 @@ async def read_root(request: Request):
                     if (oldHtml !== data.html) {
                         var isAtBottom = (chatContent.scrollHeight - chatContent.scrollTop) <= chatContent.clientHeight + 50;
                         chatContent.innerHTML = data.html;
-
                         if (isAtBottom || needsScroll) {
                             chatContent.scrollTop = chatContent.scrollHeight;
                             needsScroll = false;
                         }
                     }
-
                     isThinking = data.is_thinking;
                     if (isThinking) {
                         statusIndicator.innerHTML = '<span class="text-warning blink">⚡ ' + data.status_text + '</span>';
@@ -236,14 +186,11 @@ async def read_root(request: Request):
             });
         });
 
-        // Dedikált Github Push gomb
         document.getElementById('push_button').addEventListener('click', function(e) {
             var btn = this;
             btn.disabled = true;
-
             var formData = new FormData();
             formData.append('message', '/push');
-
             fetch('/send_message', {
                 method: 'POST',
                 body: formData
@@ -262,7 +209,7 @@ async def read_root(request: Request):
     </html>
     """
 
-    response = HTMLResponse(content=html)
+    response = HTMLResponse(content=html_part_1 + html_part_2)
     if not request.cookies.get("session_id"):
         response.set_cookie(key="session_id", value=session_id, max_age=86400*30)
     return response
@@ -271,21 +218,17 @@ async def read_root(request: Request):
 async def send_message(request: Request, message: str = Form(...)):
     session_id = get_session_id(request)
     if not session_id:
-        return {"status": "error"}
+        session_id = 'global'
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 1. Speciális GITHUB_PUSH parancs lekezelése
     if message.strip().upper() == "/PUSH":
         cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, "🚀 [RENDSZER PARANCS]: Kérlek végezz el egy Github Commit és Push műveletet a jelenlegi munkádon!"))
-        # Prioritásos jobként
-        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("GITHUB_PUSH", "Készíts egy commitot és töltsd fel a Githubra.", datetime.now().isoformat()))
-
-    # 2. Normál CHAT üzenet lekezelése (Kizárólag Jules_mx-nek!)
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", ("GITHUB_PUSH", "Jules_mx", "Készíts egy commitot és töltsd fel a Githubra."))
     else:
         cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, message))
-        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("CHAT", message, datetime.now().isoformat()))
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", ("CHAT", "Jules_mx", message))
 
     conn.commit()
     conn.close()
