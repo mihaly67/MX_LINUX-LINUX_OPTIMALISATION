@@ -218,6 +218,10 @@ async def read_root(request: Request):
             btn.disabled = true;
             var formData = new FormData();
             formData.append('message', '/push');
+
+            // Azonnal megnyitjuk a Github-ot egy új lapon, hogy a Karmester lássa az egyesítést (Merge/Pull Request)
+            window.open('https://github.com/mihaly67/Jules_mx', '_blank');
+
             fetch('/send_message', {
                 method: 'POST',
                 body: formData
