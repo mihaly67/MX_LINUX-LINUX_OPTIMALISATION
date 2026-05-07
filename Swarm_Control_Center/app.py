@@ -220,7 +220,7 @@ async def read_root(request: Request):
             formData.append('message', '/push');
 
             // Azonnal megnyitjuk a Github-ot egy új lapon, hogy a Karmester lássa az egyesítést (Merge/Pull Request)
-            window.open('https://github.com/mihaly67/Jules_mx', '_blank');
+            window.open('https://github.com/mihaly67/MX_LINUX-LINUX_OPTIMALISATION', '_blank');
 
             fetch('/send_message', {
                 method: 'POST',
