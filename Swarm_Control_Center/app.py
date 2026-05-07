@@ -25,7 +25,7 @@ def init_db_if_needed():
     c.execute('''CREATE TABLE IF NOT EXISTS chat_messages
                  (id INTEGER PRIMARY KEY, session_id TEXT, sender TEXT, agent_id TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS jobs
-                 (id INTEGER PRIMARY KEY, job_type TEXT, target_repo TEXT, payload TEXT, status TEXT, created_at DATETIME, completed_at DATETIME, result TEXT, priority INTEGER)''')
+                 (id INTEGER PRIMARY KEY, job_type TEXT, target_repo TEXT, instruction TEXT, status TEXT DEFAULT 'PENDING', assigned_to TEXT, result TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
 
@@ -225,10 +225,10 @@ async def send_message(request: Request, message: str = Form(...)):
 
     if message.strip().upper() == "/PUSH":
         cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, "🚀 [RENDSZER PARANCS]: Kérlek végezz el egy Github Commit és Push műveletet a jelenlegi munkádon!"))
-        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("GITHUB_PUSH", "Készíts egy commitot és töltsd fel a Githubra.", datetime.now().isoformat()))
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", ("GITHUB_PUSH", "Jules_mx", "Készíts egy commitot és töltsd fel a Githubra."))
     else:
         cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, message))
-        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("CHAT", message, datetime.now().isoformat()))
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", ("CHAT", "Jules_mx", message))
 
     conn.commit()
     conn.close()
