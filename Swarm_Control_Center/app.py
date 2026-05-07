@@ -1,20 +1,36 @@
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import sqlite3
 import os
 import uvicorn
 import uuid
 from typing import Optional
-import uuid
-from typing import Optional
+from datetime import datetime
 
-app = FastAPI(title="Jules Swarm Control Center")
+app = FastAPI(title="Jules Swarm Control Center (Web-TUI)")
 
 SWARM_DB = os.path.expanduser('~/Jules_mx/temp/jules_swarm_jobs.db')
 
 def get_db_connection():
-    conn = sqlite3.connect(SWARM_DB)
-    return conn
+    try:
+        conn = sqlite3.connect(SWARM_DB)
+        return conn
+    except Exception as e:
+        os.makedirs(os.path.dirname(SWARM_DB), exist_ok=True)
+        return sqlite3.connect(SWARM_DB)
+
+def init_db_if_needed():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS chat_messages
+                 (id INTEGER PRIMARY KEY, session_id TEXT, sender TEXT, agent_id TEXT, message TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS jobs
+                 (id INTEGER PRIMARY KEY, job_type TEXT, target_repo TEXT, payload TEXT, status TEXT, created_at DATETIME, completed_at DATETIME, result TEXT, priority INTEGER)''')
+    conn.commit()
+    conn.close()
+
+# Ensure DB exists
+init_db_if_needed()
 
 def get_session_id(request: Request):
     return request.cookies.get("session_id")
@@ -23,7 +39,7 @@ def get_session_id(request: Request):
 async def get_chat_history(request: Request):
     session_id = get_session_id(request)
     if not session_id:
-        return {"html": "<div class='text-muted text-center my-auto'>Nincsenek üzenetek.</div>", "is_thinking": False}
+        return {"html": "<div class='text-muted text-center my-auto'>Nincsenek üzenetek.</div>", "is_thinking": False, "status_text": ""}
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -38,38 +54,35 @@ async def get_chat_history(request: Request):
         chat_data = []
 
     is_thinking = False
+    status_text = ""
     try:
-        cursor.execute("SELECT status FROM jobs WHERE job_type = 'CHAT' AND target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
+        # Check active jobs specifically for the main agent
+        cursor.execute("SELECT status, job_type FROM jobs WHERE target_repo = 'Jules_mx' AND (status = 'PENDING' OR status = 'IN_PROGRESS') LIMIT 1")
         active_job = cursor.fetchone()
         if active_job:
             is_thinking = True
+            status_text = f"{active_job[1]} ({active_job[0]})"
     except Exception as e:
         print(e)
 
     conn.close()
 
-    html = ""
     if not chat_data:
-        html += "<div class='text-muted text-center my-auto'>Nincsenek még üzenetek ebben a sessionben.</div>"
+        html = "<div class='text-muted text-center my-auto'>Jules_mx üresjáratban. Várakozás parancsra...</div>"
     else:
-        for chat in chat_data:
-            sender, agent, msg, tstamp = chat
+        html = ""
+        for row in chat_data:
+            sender = row[0]
+            msg = row[2]
+            ts = row[3][11:19] if row[3] else ""
+
             if sender == 'USER':
-                html += f"<div class='mb-3 text-end'><small class='text-muted'>{tstamp}</small><br><div class='badge bg-primary fs-6 chat-badge'>{msg}</div></div>"
+                html += f"<div class='mb-2 text-start'><span class='text-success fw-bold'>[{ts}] KARMESTER:</span> <span class='text-light'>{msg}</span></div>"
             else:
-                html += f"<div class='mb-3 text-start'><small class='text-muted'>{tstamp} - <strong>{agent}</strong></small><br><div class='badge bg-secondary fs-6 chat-badge'>{msg}</div></div>"
+                html += f"<div class='mb-2 text-start'><span class='text-info fw-bold'>[{ts}] Jules_mx:</span> <span class='text-light'>{msg}</span></div>"
 
-    if is_thinking:
-        html += """
-            <div class='mb-3 text-start' id='thinking-indicator'>
-                <small class='text-muted'>Éppen most - <strong>Jules_mx</strong></small><br>
-                <div class='badge bg-secondary fs-6 chat-badge typing-indicator'>
-                    Dolgozom <span></span><span></span><span></span>
-                </div>
-            </div>
-        """
+    return {"html": html, "is_thinking": is_thinking, "status_text": status_text}
 
-    return {"html": html, "is_thinking": is_thinking}
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -77,137 +90,104 @@ async def read_root(request: Request):
     if not session_id:
         session_id = str(uuid.uuid4())
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute("SELECT agent_id, last_heartbeat, status, last_error, cpu_usage_percent, mem_usage_mb FROM swarm_health ORDER BY agent_id")
-        health_data = cursor.fetchall()
-    except Exception as e:
-        print(e)
-        health_data = []
-
-    conn.close()
-
     html = f"""
     <!DOCTYPE html>
     <html lang="hu">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Jules Swarm Control Center</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>Jules Swarm Control Center (Web TUI)</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
-            body {{ background-color: #1e1e2f; color: #c8c8d0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
-            .card {{ background-color: #2a2a3f; border: none; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }}
-            .card-header {{ background-color: #3b3b55; font-weight: bold; border-bottom: 1px solid #4a4a6a; }}
-            .text-success {{ color: #4ade80 !important; }}
-            .text-warning {{ color: #facc15 !important; }}
-            .text-danger {{ color: #f87171 !important; }}
-            pre {{ background-color: #151520; color: #a5b4fc; padding: 10px; border-radius: 5px; overflow-x: auto; }}
-            .btn-primary {{ background-color: #6366f1; border: none; }}
-            .btn-primary:hover {{ background-color: #4f46e5; }}
-            input, select, textarea {{ background-color: #151520 !important; color: white !important; border: 1px solid #4a4a6a !important; }}
-            .chat-badge {{ white-space: pre-wrap; word-break: break-word; text-align: left; display: inline-block; max-width: 80%; padding: 10px; }}
-            .typing-indicator span {{
-                display: inline-block;
-                width: 6px;
-                height: 6px;
-                background-color: #a5b4fc;
-                border-radius: 50%;
-                margin: 0 2px;
-                animation: typing 1.4s infinite ease-in-out both;
+            body {{
+                background-color: #0d1117;
+                color: #c9d1d9;
+                font-family: 'Courier New', Courier, monospace; /* Terminal font */
+                margin: 0;
+                padding: 10px;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
             }}
-            .typing-indicator span:nth-child(1) {{ animation-delay: -0.32s; }}
-            .typing-indicator span:nth-child(2) {{ animation-delay: -0.16s; }}
-            @keyframes typing {{
-                0%, 80%, 100% {{ transform: scale(0); }}
-                40% {{ transform: scale(1); }}
+            .card {{
+                background-color: #161b22;
+                border: 1px solid #30363d;
+                margin-bottom: 10px;
+                flex-grow: 1;
+                display: flex;
+                flex-direction: column;
+            }}
+            .card-header {{
+                background-color: #21262d;
+                font-weight: bold;
+                border-bottom: 1px solid #30363d;
+                color: #58a6ff;
+            }}
+            .text-success {{ color: #3fb950 !important; }}
+            .text-info {{ color: #58a6ff !important; }}
+            .text-warning {{ color: #d29922 !important; }}
+            .text-danger {{ color: #f85149 !important; }}
+            .btn-primary {{ background-color: #238636; border: none; color: #ffffff; font-weight: bold; }}
+            .btn-primary:hover {{ background-color: #2ea043; }}
+            .btn-warning {{ background-color: #d29922; border: none; color: #ffffff; font-weight: bold; margin-left: 5px; }}
+            input, select, textarea {{
+                background-color: #0d1117 !important;
+                color: #c9d1d9 !important;
+                border: 1px solid #30363d !important;
+                font-family: 'Courier New', Courier, monospace;
+            }}
+            input:focus, textarea:focus {{
+                border-color: #58a6ff !important;
+                box-shadow: 0 0 0 0.2rem rgba(88, 166, 255, 0.25) !important;
+            }}
+
+            #chat-content {{
+                flex-grow: 1;
+                overflow-y: auto;
+                background-color: #0d1117;
+                padding: 15px;
+                border-radius: 5px;
+                border: 1px solid #30363d;
+            }}
+
+            .blink {{
+                animation: blinker 1.5s linear infinite;
+            }}
+            @keyframes blinker {{
+                50% {{ opacity: 0; }}
             }}
         </style>
     </head>
     <body>
-    <div class="container mt-4">
-        <h2 class="mb-4 text-center">🤖 Jules Swarm Control Center</h2>
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>╭─ 💻 Jules_mx Terminal [Session: {session_id[:8]}]</span>
+                <span id="status-indicator" class="text-secondary fw-bold">✅ IDLE</span>
+            </div>
+            <div class="card-body d-flex flex-direction-column" style="flex-direction: column; padding-bottom: 5px;">
+                <!-- Chat Output -->
+                <div id="chat-content" class="mb-3">
+                    <div class='text-muted text-center my-auto'>Rendszer indítása...</div>
+                </div>
 
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>Rajtagok Allapota (Health Monitor)</span>
-                        <button class="btn btn-sm btn-outline-light" onclick="location.reload()">Frissites</button>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-dark table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Agent ID</th>
-                                        <th>Statusz</th>
-                                        <th>Utolso Eletjel</th>
-                                        <th>CPU (%)</th>
-                                        <th>RAM (MB)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-    """
-
-    for agent in health_data:
-        status_badge = '<span class="badge bg-success">Aktiv</span>' if agent[2] == 'ALIVE' else '<span class="badge bg-danger">Hiba</span>'
-        html += f"""
-                                    <tr>
-                                        <td><strong>{agent[0]}</strong></td>
-                                        <td>{status_badge}</td>
-                                        <td>{agent[1]}</td>
-                                        <td>{agent[4]}%</td>
-                                        <td>{agent[5]} MB</td>
-                                    </tr>
-        """
-
-    html += """
-                                </tbody>
-                            </table>
+                <!-- Input Form -->
+                <form id="chat-form" action="/send_message" method="POST" style="margin-bottom: 0;">
+                    <div class="d-flex">
+                        <textarea class="form-control me-2" name="message" id="message_input" placeholder="Parancs vagy üzenet... (vagy használd a PUSH gombot)" rows="2" style="resize: none;" required></textarea>
+                        <div class="d-flex flex-column justify-content-between">
+                            <button type="submit" id="send_button" class="btn btn-primary mb-1">KÜLDÉS</button>
+                            <button type="button" id="push_button" class="btn btn-warning">GITHUB PUSH</button>
                         </div>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
 
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>💬 Jules Chat (Session: {session_id})</span>
-                    </div>
-                    <div class="card-body">
-                        <!-- Betolteskor ures, majd a JS Ajax tolti ki -->
-                        <div id="chat-content" class="chat-box mb-3" style="height: 400px; overflow-y: auto; background-color: #151520; padding: 15px; border-radius: 5px; border: 1px solid #4a4a6a; display: flex; flex-direction: column;">
-                            <div class='text-muted text-center my-auto'>Betöltés...</div>
-                        </div>
-
-                        <form id="chat-form" action="/send_message" method="POST">
-                            <input type="hidden" name="agent_id" value="Jules_mx">
-                            <div class="row align-items-end">
-                                <div class="col-md-10">
-                                    <textarea class="form-control" name="message" id="message_input" placeholder="Írj üzenetet a Fő Agentnek..." rows="4" style="resize: vertical;" required></textarea>
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="submit" id="send_button" class="btn btn-primary w-100 h-100">Küldés</button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Ajax alapu Chat frissites
         var chatContent = document.getElementById('chat-content');
+        var statusIndicator = document.getElementById('status-indicator');
         var isThinking = false;
-        var needsScroll = true; // Elso betoltesnel gorgetunk
+        var needsScroll = true;
 
         function fetchChat() {
             fetch('/chat_history')
@@ -215,27 +195,27 @@ async def read_root(request: Request):
                 .then(data => {
                     var oldHtml = chatContent.innerHTML;
                     if (oldHtml !== data.html) {
-                        // Ellenorizzuk hogy a felhasznalo a doboz aljan van-e gorgetve
-                        // Vagy ha epp most kuldott uzenetet
                         var isAtBottom = (chatContent.scrollHeight - chatContent.scrollTop) <= chatContent.clientHeight + 50;
-
                         chatContent.innerHTML = data.html;
-                        isThinking = data.is_thinking;
 
-                        // Csak akkor gorgetunk az aljara, ha eddig is ott voltunk (nem zavarjuk meg a gorgetest)
                         if (isAtBottom || needsScroll) {
                             chatContent.scrollTop = chatContent.scrollHeight;
                             needsScroll = false;
                         }
                     }
+
+                    isThinking = data.is_thinking;
+                    if (isThinking) {
+                        statusIndicator.innerHTML = '<span class="text-warning blink">⚡ ' + data.status_text + '</span>';
+                    } else {
+                        statusIndicator.innerHTML = '<span class="text-secondary">✅ IDLE</span>';
+                    }
                 })
-                .catch(error => console.error('Hiba tortent:', error));
+                .catch(error => console.error('Hiba:', error));
         }
 
-        // 3 masodpercenkent kerdezzuk le csendben a hatterben
-        setInterval(fetchChat, 3000);
+        setInterval(fetchChat, 2000);
 
-        // Form kuldeset is megfogjuk es AJAX-szal kuldjuk el, igy soha nem toltodik ujra az oldal
         document.getElementById('chat-form').addEventListener('submit', function(e) {
             e.preventDefault();
             var messageInput = document.getElementById('message_input');
@@ -243,21 +223,39 @@ async def read_root(request: Request):
             var btn = document.getElementById('send_button');
 
             btn.disabled = true;
-
             fetch('/send_message', {
                 method: 'POST',
                 body: formData
             }).then(() => {
                 messageInput.value = '';
                 btn.disabled = false;
-                needsScroll = true; // Kuldunk, szoval kenyszeritsuk a gorgetest az aljara
-                fetchChat(); // Azonnal frissitunk
+                needsScroll = true;
+                fetchChat();
             }).catch(() => {
                 btn.disabled = false;
             });
         });
 
-        // Elsore is azonnal lefuttatjuk
+        // Dedikált Github Push gomb
+        document.getElementById('push_button').addEventListener('click', function(e) {
+            var btn = this;
+            btn.disabled = true;
+
+            var formData = new FormData();
+            formData.append('message', '/push');
+
+            fetch('/send_message', {
+                method: 'POST',
+                body: formData
+            }).then(() => {
+                btn.disabled = false;
+                needsScroll = true;
+                fetchChat();
+            }).catch(() => {
+                btn.disabled = false;
+            });
+        });
+
         fetchChat();
     </script>
     </body>
@@ -266,22 +264,28 @@ async def read_root(request: Request):
 
     response = HTMLResponse(content=html)
     if not request.cookies.get("session_id"):
-        response.set_cookie(key="session_id", value=session_id, max_age=86400*30) # 30 days
+        response.set_cookie(key="session_id", value=session_id, max_age=86400*30)
     return response
 
 @app.post("/send_message")
-async def send_message(request: Request, agent_id: str = Form(...), message: str = Form(...)):
+async def send_message(request: Request, message: str = Form(...)):
     session_id = get_session_id(request)
     if not session_id:
         return {"status": "error"}
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, ?, 'USER', ?)", (session_id, agent_id, message))
 
-    # Készítünk egy Swarm Job-ot, hogy az ügynök tényleg válaszoljon rá
-    instruction = f"CHAT MESSAGE from User (Session: {session_id}): {message}. Please respond to it."
-    cursor.execute("INSERT INTO jobs (job_type, target_repo, instruction) VALUES (?, ?, ?)", ("CHAT", agent_id, instruction))
+    # 1. Speciális GITHUB_PUSH parancs lekezelése
+    if message.strip().upper() == "/PUSH":
+        cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, "🚀 [RENDSZER PARANCS]: Kérlek végezz el egy Github Commit és Push műveletet a jelenlegi munkádon!"))
+        # Prioritásos jobként
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("GITHUB_PUSH", "Készíts egy commitot és töltsd fel a Githubra.", datetime.now().isoformat()))
+
+    # 2. Normál CHAT üzenet lekezelése (Kizárólag Jules_mx-nek!)
+    else:
+        cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'USER', ?)", (session_id, message))
+        cursor.execute("INSERT INTO jobs (job_type, target_repo, payload, status, created_at, priority) VALUES (?, 'Jules_mx', ?, 'PENDING', ?, 1)", ("CHAT", message, datetime.now().isoformat()))
 
     conn.commit()
     conn.close()
@@ -289,5 +293,3 @@ async def send_message(request: Request, agent_id: str = Form(...), message: str
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
-
-STDERR:
