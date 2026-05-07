@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
+from datetime import datetime, timedelta
 import sqlite3
 import os
 import uvicorn
@@ -70,7 +71,11 @@ async def get_chat_history(request: Request):
         for row in chat_data:
             sender = row[0]
             msg = row[2]
-            ts = row[3][11:19] if row[3] else ""
+            try:
+                dt = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S') + timedelta(hours=2)
+                ts = dt.strftime('%H:%M:%S')
+            except:
+                ts = row[3][11:19] if row[3] else ""
             if sender == 'USER':
                 html += f"<div class='mb-2 text-start'><span class='text-success fw-bold'>[{ts}] KARMESTER:</span> <span class='text-light'>{msg}</span></div>"
             else:
@@ -106,7 +111,19 @@ async def read_root(request: Request):
             .btn-warning {{ background-color: #d29922; border: none; color: #ffffff; font-weight: bold; margin-left: 5px; }}
             input, select, textarea {{ background-color: #0d1117 !important; color: #c9d1d9 !important; border: 1px solid #30363d !important; font-family: 'Courier New', Courier, monospace; }}
             input:focus, textarea:focus {{ border-color: #58a6ff !important; box-shadow: 0 0 0 0.2rem rgba(88, 166, 255, 0.25) !important; }}
-            #chat-content {{ flex-grow: 1; overflow-y: auto; background-color: #0d1117; padding: 15px; border-radius: 5px; border: 1px solid #30363d; }}
+            #chat-content {{
+                flex-grow: 1;
+                max-height: 50vh !important;
+                overflow-y: scroll !important;
+                background-color: #0d1117;
+                padding: 15px;
+                border-radius: 5px;
+                border: 1px solid #30363d;
+            }}
+            #chat-content::-webkit-scrollbar {{ width: 8px; }}
+            #chat-content::-webkit-scrollbar-track {{ background: #0d1117; }}
+            #chat-content::-webkit-scrollbar-thumb {{ background: #30363d; border-radius: 4px; }}
+            #chat-content::-webkit-scrollbar-thumb:hover {{ background: #58a6ff; }}
             .blink {{ animation: blinker 1.5s linear infinite; }}
             @keyframes blinker {{ 50% {{ opacity: 0; }} }}
         </style>
