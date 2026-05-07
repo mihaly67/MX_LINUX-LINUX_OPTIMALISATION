@@ -44,7 +44,7 @@ async def get_chat_history(request: Request):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT 50", (session_id,))
+        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages ORDER BY timestamp DESC LIMIT 50")
         chat_data = cursor.fetchall()
         chat_data.reverse()
     except Exception as e:
@@ -218,7 +218,7 @@ async def read_root(request: Request):
 async def send_message(request: Request, message: str = Form(...)):
     session_id = get_session_id(request)
     if not session_id:
-        return {"status": "error"}
+        session_id = 'global'
 
     conn = get_db_connection()
     cursor = conn.cursor()
