@@ -123,7 +123,7 @@ async def read_root(request: Request):
                 </div>
                 <form id="chat-form" action="/send_message" method="POST" style="margin-bottom: 0;">
                     <div class="d-flex">
-                        <textarea class="form-control me-2" name="message" id="message_input" placeholder="Parancs vagy üzenet... (vagy PUSH gomb)" rows="2" style="resize: none;" required></textarea>
+                        <textarea class="form-control me-2" name="message" id="message_input" placeholder="Parancs vagy üzenet... (vagy PUSH gomb)" rows="2" style="resize: vertical; overflow-y: auto;" required></textarea>
                         <div class="d-flex flex-column justify-content-between">
                             <button type="submit" id="send_button" class="btn btn-primary mb-1">KÜLDÉS</button>
                             <button type="button" id="push_button" class="btn btn-warning">GITHUB PUSH</button>
