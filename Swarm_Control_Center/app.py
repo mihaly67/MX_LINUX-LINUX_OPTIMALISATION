@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
 from datetime import datetime, timedelta
 import sqlite3
 import os
@@ -36,20 +37,15 @@ def get_session_id(request: Request):
     return request.cookies.get("session_id")
 
 @app.get("/chat_history", response_class=JSONResponse)
-async def get_chat_history(request: Request):
-    session_id = get_session_id(request)
-    if not session_id:
-        return {"html": "<div class='text-muted text-center my-auto'>Nincsenek üzenetek.</div>", "is_thinking": False, "status_text": ""}
-
+async def get_chat_history(request: Request, last_count: int = 0):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages ORDER BY timestamp DESC LIMIT 50")
-        chat_data = cursor.fetchall()
-        chat_data.reverse()
+        cursor.execute("SELECT COUNT(*) FROM chat_messages")
+        current_count = cursor.fetchone()[0]
     except Exception as e:
-        chat_data = []
+        current_count = 0
 
     is_thinking = False
     status_text = ""
@@ -61,6 +57,18 @@ async def get_chat_history(request: Request):
             status_text = f"{active_job[1]} ({active_job[0]})"
     except Exception as e:
         pass
+
+    # Ha a szam megegyezik a kliensevel, nem kuldjuk el a teljes HTML-t, csak a statuszt
+    if current_count == last_count and current_count != 0:
+        conn.close()
+        return {"html": None, "is_thinking": is_thinking, "status_text": status_text, "msg_count": current_count}
+
+    try:
+        cursor.execute("SELECT sender, agent_id, message, timestamp FROM chat_messages ORDER BY timestamp DESC LIMIT 50")
+        chat_data = cursor.fetchall()
+        chat_data.reverse()
+    except Exception as e:
+        chat_data = []
 
     conn.close()
 
@@ -76,12 +84,13 @@ async def get_chat_history(request: Request):
                 ts = dt.strftime('%H:%M:%S')
             except:
                 ts = row[3][11:19] if row[3] else ""
+
             if sender == 'USER':
                 html += f"<div class='mb-2 text-start'><span class='text-success fw-bold'>[{ts}] KARMESTER:</span> <span class='text-light'>{msg}</span></div>"
             else:
                 html += f"<div class='mb-2 text-start'><span class='text-info fw-bold'>[{ts}] Jules_mx:</span> <span class='text-light'>{msg}</span></div>"
 
-    return {"html": html, "is_thinking": is_thinking, "status_text": status_text}
+    return {"html": html, "is_thinking": is_thinking, "status_text": status_text, "msg_count": current_count}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -157,15 +166,16 @@ async def read_root(request: Request):
         var statusIndicator = document.getElementById('status-indicator');
         var isThinking = false;
         var needsScroll = true;
+        var lastMsgCount = 0;
 
         function fetchChat() {
-            fetch('/chat_history')
+            fetch('/chat_history?last_count=' + lastMsgCount)
                 .then(response => response.json())
                 .then(data => {
-                    var oldHtml = chatContent.innerHTML;
-                    if (oldHtml !== data.html) {
+                    if (data.html !== null) {
                         var isAtBottom = (chatContent.scrollHeight - chatContent.scrollTop) <= chatContent.clientHeight + 50;
                         chatContent.innerHTML = data.html;
+                        lastMsgCount = data.msg_count;
                         if (isAtBottom || needsScroll) {
                             chatContent.scrollTop = chatContent.scrollHeight;
                             needsScroll = false;
@@ -181,7 +191,7 @@ async def read_root(request: Request):
                 .catch(error => console.error('Hiba:', error));
         }
 
-        setInterval(fetchChat, 2000);
+        setInterval(fetchChat, 5000);
 
         document.getElementById('chat-form').addEventListener('submit', function(e) {
             e.preventDefault();
