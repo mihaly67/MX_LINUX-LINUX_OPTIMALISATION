@@ -67,10 +67,11 @@ def process_job(job_id, job_type, instruction):
     logger.info(f"Job feldolgozása kezdődik: ID={job_id}, Típus={job_type}")
 
     if job_type == "CHAT":
-        # A felhasználó kérdése a instruction mezőben van
-        prompt = instruction
-        response = call_llm(prompt)
-        return response
+        # CHAT job esetén NE dolgozzuk fel LLM-mel!
+        # Ezt a feladatot meghagyjuk a PENDING állapotban, de egy speciális
+        # "WAITING_FOR_JULES" üzenettel, vagy magára hagyjuk a fő agentnek.
+        # Itt a process_job mostantól nem generál automatikus választ CHAT-re.
+        return None
     elif job_type == "GITHUB_PUSH":
         response = execute_github_push()
         return response
@@ -93,12 +94,13 @@ def main():
             cursor = conn.cursor()
 
             # Keresünk egy PENDING feladatot a Jules_mx-nek
-            cursor.execute("SELECT id, job_type, instruction FROM jobs WHERE target_repo = 'Jules_mx' AND status = 'PENDING' ORDER BY timestamp ASC LIMIT 1")
+            # CSAK a GITHUB_PUSH feladatokat kérjük le (a CHAT-et a lokális Keep-Alive daemon olvassa!)
+            cursor.execute("SELECT id, job_type, instruction FROM jobs WHERE target_repo = 'Jules_mx' AND job_type = 'GITHUB_PUSH' AND status = 'PENDING' ORDER BY timestamp ASC LIMIT 1")
             job = cursor.fetchone()
 
             if job:
                 job_id, job_type, instruction = job
-                logger.info(f"Találtam egy PENDING feladatot: ID={job_id}")
+                logger.info(f"Találtam egy GITHUB_PUSH feladatot: ID={job_id}")
 
                 # Állítsuk IN_PROGRESS-re
                 cursor.execute("UPDATE jobs SET status = 'IN_PROGRESS', assigned_to = 'Jules_mx' WHERE id = ?", (job_id,))
@@ -107,14 +109,20 @@ def main():
                 # Feldolgozzuk
                 result_text = process_job(job_id, job_type, instruction)
 
-                # Válasz beszúrása a chat_messages táblába, hogy a UI lássa (mivel 'global' chathistory van, session_id lehet üres vagy 'global')
-                cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'AGENT', ?)", ("global", result_text))
+                if result_text is not None:
+                    # Válasz beszúrása a chat_messages táblába, hogy a UI lássa (mivel 'global' chathistory van, session_id lehet üres vagy 'global')
+                    cursor.execute("INSERT INTO chat_messages (session_id, agent_id, sender, message) VALUES (?, 'Jules_mx', 'AGENT', ?)", ("global", result_text))
 
-                # Beállítjuk a jobot COMPLETED-re, beírva az eredményt is
-                cursor.execute("UPDATE jobs SET status = 'COMPLETED', result = ? WHERE id = ?", (result_text, job_id))
-                conn.commit()
-
-                logger.info(f"Job befejezve: ID={job_id}")
+                    # Beállítjuk a jobot COMPLETED-re, beírva az eredményt is
+                    cursor.execute("UPDATE jobs SET status = 'COMPLETED', result = ? WHERE id = ?", (result_text, job_id))
+                    conn.commit()
+                    logger.info(f"Job befejezve: ID={job_id}")
+                else:
+                    # Ha a feldolgozás (pl. CHAT) nem ad vissza result_text-et, akkor a lokális Jules agent fogja feldolgozni.
+                    # Tehát visszatesszük a feladatot PENDING-be, de valójában ezt a Watcher démon egyszerűen békén is hagyhatná.
+                    # Most állítsuk vissza a státuszát PENDING-re, hogy a lokális daemon felolvassa, majd ignoraljuk a watchernél:
+                    # Inkább egyszerűen ignoráljuk CHAT esetén a main()-ben, hogy a watcher ne pörögjön rajta végtelenül.
+                    pass
             else:
                 # Nincs PENDING feladat, pihenünk picit
                 pass

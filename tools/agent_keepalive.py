@@ -2,6 +2,41 @@ import time
 import os
 import sys
 import datetime
+import subprocess
+import json
+
+def fetch_pending_jobs():
+    """Lekérdezi az MCP bridge-en keresztül a VPS-ről a PENDING CHAT jobokat."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    mcp_tool = os.path.join(script_dir, "skills", "mcp_bridge_tool.py")
+
+    # Csak környezeti változókból olvassuk a jelszót/kulcsot, nem égetjük be a kódba!
+    env = os.environ.copy()
+
+    cmd = [
+        "python3", mcp_tool,
+        "--tool", "execute_bash",
+        "--args", '{"command": "sqlite3 /home/misi/Jules_mx/temp/jules_swarm_jobs.db \\"SELECT id, instruction FROM jobs WHERE target_repo=\'Jules_mx\' AND job_type=\'CHAT\' AND status=\'PENDING\' ORDER BY timestamp ASC LIMIT 1;\\""}'
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=30)
+
+        # Tisztítjuk a kimenetet, megpróbáljuk megtalálni az igazi adatot a sok MCP log között
+        output = result.stdout.strip()
+
+        # Mivel az MCP bridge kiírja a "STDOUT:" és "STDERR:" sorokat, parzolnunk kell:
+        if "STDOUT:" in output:
+            stdout_part = output.split("STDOUT:")[1].split("STDERR:")[0].strip()
+            if stdout_part and stdout_part != "":
+                # Ellenőrizzük, hogy valóban egy valid id|instruction formátum-e (tartalmaz '|')
+                if "|" in stdout_part:
+                    return stdout_part
+        return None
+    except Exception as e:
+        # Ne spammeljük tele a konzolt, ha hálózati hiba van
+        pass
+    return None
 
 def run_daemon():
     """
@@ -46,6 +81,21 @@ def run_daemon():
                     print(f"👉 KÖTELEZŐ AKCIÓ: Futtasd azonnal a 'python3 ENVIRONMENT_SETUP/agent_memory_manager.py --action write ...' parancsot a szinkronizációhoz!\n", flush=True)
             else:
                  print(f"⚠️ [SUPERVISOR ALERT] A memória fájl ({memory_file}) NEM LÉTEZIK! Használd a memory managert a létrehozásához!", flush=True)
+
+            # 3. Új Jobok (CHAT) Keresése az SQLite-ban (Minden 3. ciklusban = 45 mp)
+            # Biztosabb ciklus számlálót használunk
+            if not hasattr(run_daemon, "loop_count"):
+                run_daemon.loop_count = 0
+            run_daemon.loop_count += 1
+
+            if run_daemon.loop_count % 3 == 0:
+                pending_job = fetch_pending_jobs()
+                if pending_job:
+                    print(f"\n\n{'='*60}")
+                    print(f"🚨🚨 [SWARM ORCHESTRATOR] ÚJ ÜZENET A TUI-BÓL! 🚨🚨")
+                    print(f"👉 ÜZENET: {pending_job}")
+                    print(f"👉 KÖTELEZŐ AKCIÓ: Kérlek olvasd el, reagálj a fenti üzenetre, és használd a jules_swarm_jobs.db-t (UPDATE status='COMPLETED') a válaszadásra!")
+                    print(f"{'='*60}\n\n", flush=True)
 
             # Flusholjuk a standard kimenetet is
             sys.stdout.flush()
