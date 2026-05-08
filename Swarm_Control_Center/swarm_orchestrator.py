@@ -8,8 +8,8 @@ import logging
 
 # --- Beállítások ---
 # Feltételezzük, hogy ez a script a VPS-en fog futni, ugyanabban a mappában/környezetben,
-# ahonnan a jules_swarm_jobs.db elérhető.
-DB_PATH = os.path.expanduser("~/Jules_mx/jules_swarm_jobs.db")
+# ahonnan a jules_swarm_jobs.db elérhető. Az app.py a temp/ mappába ír!
+DB_PATH = os.path.expanduser("~/Jules_mx/temp/jules_swarm_jobs.db")
 POLL_INTERVAL = 5  # Másodperc
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3:latest" # Vagy qwen2.5:1.5b
