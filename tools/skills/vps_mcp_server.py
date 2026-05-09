@@ -496,6 +496,22 @@ def init_memory_register():
         with open(MEMORY_REGISTER_FILE, "w", encoding="utf-8") as f:
             json.dump({"Core": {}, "Archival_Pointers": []}, f)
 
+
+@mcp.tool()
+async def send_message_to_jules_inbox(sender_name: str, message: str) -> str:
+    """(ÚJ) Ezzel az eszközzel a Cline (vagy bármely AI) szöveges kérdést, üzenetet hagyhat a VPS-en Jules_mx számára."""
+    inbox_dir = "/home/misi/Jules_mx/temp/inbox"
+    os.makedirs(inbox_dir, exist_ok=True)
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filepath = os.path.join(inbox_dir, f"msg_{sender_name}_{timestamp}.txt")
+
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"Feladó: {sender_name}\nIdőpont: {timestamp}\n\nÜzenet:\n{message}\n")
+        return f"✅ Üzenet sikeresen kézbesítve a VPS Inboxba: {filepath}"
+    except Exception as e:
+        return f"❌ Hiba az üzenet küldésekor: {str(e)}"
 @mcp.tool()
 async def read_memory_register() -> str:
     """
