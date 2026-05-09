@@ -500,11 +500,17 @@ def init_memory_register():
 @mcp.tool()
 async def send_message_to_jules_inbox(sender_name: str, message: str) -> str:
     """(ÚJ) Ezzel az eszközzel a Cline (vagy bármely AI) szöveges kérdést, üzenetet hagyhat a VPS-en Jules_mx számára."""
+    import re
+    # Biztonság: Path Traversal elleni védelem (csak alfanumerikus és aláhúzás engedélyezett)
+    safe_sender_name = re.sub(r'[^a-zA-Z0-9_]', '', sender_name)
+    if not safe_sender_name:
+        safe_sender_name = "unknown_sender"
+
     inbox_dir = "/home/misi/Jules_mx/temp/inbox"
     os.makedirs(inbox_dir, exist_ok=True)
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = os.path.join(inbox_dir, f"msg_{sender_name}_{timestamp}.txt")
+    filepath = os.path.join(inbox_dir, f"msg_{safe_sender_name}_{timestamp}.txt")
 
     try:
         with open(filepath, "w", encoding="utf-8") as f:
@@ -512,6 +518,7 @@ async def send_message_to_jules_inbox(sender_name: str, message: str) -> str:
         return f"✅ Üzenet sikeresen kézbesítve a VPS Inboxba: {filepath}"
     except Exception as e:
         return f"❌ Hiba az üzenet küldésekor: {str(e)}"
+
 @mcp.tool()
 async def read_memory_register() -> str:
     """
