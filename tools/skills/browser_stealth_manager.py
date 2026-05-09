@@ -17,67 +17,103 @@ async def human_like_typing(locator, text: str):
 async def human_like_delay(min_sec=1.5, max_sec=4.0):
     await asyncio.sleep(random.uniform(min_sec, max_sec))
 
+def clean_cookies(cookies):
+    valid_same_site = ["Strict", "Lax", "None"]
+    for cookie in cookies:
+        if 'sameSite' in cookie:
+            if cookie['sameSite'] is None:
+                cookie.pop('sameSite')
+            elif cookie['sameSite'] not in valid_same_site:
+                if str(cookie['sameSite']).lower() == "no_restriction":
+                    cookie['sameSite'] = "None"
+                else:
+                    cookie.pop('sameSite')
+
+        for key in ['hostOnly', 'session', 'storeId', 'id', 'partitionKey']:
+            if key in cookie:
+                cookie.pop(key)
+    return cookies
+
 async def run_stealth_query(query: str):
     print(f"🕵️ Gerilla RAG indítása COOKIE INJECTION módszerrel. Célpont: jules.google.com | Feladat: {query}", file=sys.stderr)
 
     url = "https://jules.google.com/session"
-    cookie_path = "/home/misi/Jules_mx/temp/cookie.json"
+    cookie_path = "/home/misi/Jules_mx/cookie.json"
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': random.choice([1920, 1366, 1536]), 'height': random.choice([1080, 768, 864])},
+            viewport={'width': 1920, 'height': 1080},
             java_script_enabled=True,
             locale="hu-HU",
             timezone_id="Europe/Budapest"
         )
 
-        # --- COOKIE INJECTION (A HACKER ÚT) ---
         if os.path.exists(cookie_path):
-            print(f"🍪 Sütik (Cookie.json) betöltése a {cookie_path} fájlból...", file=sys.stderr)
+            print(f"🍪 Sütik betöltése a {cookie_path} fájlból...", file=sys.stderr)
             try:
                 with open(cookie_path, 'r') as f:
                     cookies = json.load(f)
-                await context.add_cookies(cookies)
-                print("✅ Sütik sikeresen injektálva a kontextusba!", file=sys.stderr)
+
+                clean_cookies_list = clean_cookies(cookies)
+                await context.add_cookies(clean_cookies_list)
+                print("✅ Sütik sikeresen injektálva a Playwright kompatibilitási szűrő után!", file=sys.stderr)
             except Exception as e:
                 print(f"❌ Hiba a sütik betöltésekor: {e}", file=sys.stderr)
         else:
-            print(f"⚠️ FIGYELEM: Nem található a {cookie_path} fájl! A bejelentkezés elbukhat.", file=sys.stderr)
+            print(f"⚠️ FIGYELEM: Nem található a {cookie_path} fájl!", file=sys.stderr)
 
         page = await context.new_page()
 
         try:
             print(f"⏳ Átirányítás egyenesen a céloldalra: {url}...", file=sys.stderr)
             await page.goto(url, wait_until="networkidle", timeout=45000)
-            await human_like_delay(3.0, 5.0)
+            await human_like_delay(5.0, 7.0) # Több időt hagyunk a dinamikus tartalmak (codebases) betöltésére
 
-            # --- OLDAL ELEMZÉSE (DOM OLVASÁS) ---
-            print("👁️ Oldal tartalmának olvasása (bizonyíték a belépésről)...", file=sys.stderr)
+            print("👁️ Interaktív elemek (MINDEN LINK ÉS GOMB) keresése...", file=sys.stderr)
+
+            # Kibővített DOM keresés: Szűrő nélkül hozzuk le az összes linket és gombot!
+            interactive_elements = await page.evaluate("""
+                () => {
+                    const elements = Array.from(document.querySelectorAll('a, button, div[role="button"], div[role="treeitem"]'));
+                    return elements.map(el => {
+                        return {
+                            tag: el.tagName,
+                            text: el.innerText ? el.innerText.replace(/\\n/g, ' ').trim() : '',
+                            className: el.className,
+                            role: el.getAttribute('role')
+                        };
+                    }).filter(el => el.text.length > 0 && el.text.length < 100);
+                }
+            """)
+
             page_title = await page.title()
-            body_text = await page.evaluate("document.body.innerText")
 
             result_data = {
                 "status": "success",
-                "message": "Cookie Injection lefutott, céloldal betöltve (login kikerülve).",
+                "message": "DOM Explorer mód lefutott.",
                 "url": url,
                 "page_title": page_title,
                 "simulated_query": query,
-                "extracted_content": body_text[:1000] + "..." if len(body_text) > 1000 else body_text
+                "all_interactive_elements": interactive_elements
             }
 
             collector_dir = "/home/misi/Jules_mx/temp/stealth_collector"
             os.makedirs(collector_dir, exist_ok=True)
             import datetime
-            filename = f"raj8_cookie_test_{datetime.datetime.now().strftime('%H%M%S')}.json"
+            filename = f"dom_explorer_{datetime.datetime.now().strftime('%H%M%S')}.json"
             filepath = os.path.join(collector_dir, filename)
 
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, indent=2, ensure_ascii=False)
 
-            print(f"📁 Raj8 Kutatási Eredmény (Cookie módszer): {filepath}", file=sys.stderr)
-            print(json.dumps(result_data, ensure_ascii=False, indent=2))
+            print(f"📁 DOM Explorer Eredmény: {filepath}", file=sys.stderr)
+
+            # Kinyomtatjuk a konzolra is az első 15 elemet, hogy lássuk, hol járunk
+            print("Kinyert elemek listája (első 15):", file=sys.stderr)
+            for i, el in enumerate(interactive_elements[:15]):
+                print(f"[{i}] {el['tag']}: {el['text']} (Role: {el.get('role')})", file=sys.stderr)
 
         except Exception as e:
             print(json.dumps({"status": "error", "error": str(e)}))
