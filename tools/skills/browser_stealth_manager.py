@@ -37,7 +37,7 @@ async def run_stealth_query(query: str):
     print(f"🕵️ Gerilla RAG AI-to-AI Indítása. Feladat: {query}", file=sys.stderr)
 
     # 1. BIZTONSÁGI LÉPÉS: Közvetlen ugrás a Raj8 Codebase Overview-ba
-    url = "https://jules.google.com/repo/github/mihaly67/Raj8"
+    url = "https://jules.google.com/repo/github/mihaly67/Raj8/overview"
     cookie_path = "/home/misi/Jules_mx/cookie.json"
 
     async with async_playwright() as p:
@@ -70,12 +70,33 @@ async def run_stealth_query(query: str):
             print("👁️ Keresem az utolsó sessiont (Completed) JavaScript alapú kattintással...", file=sys.stderr)
             clicked = await page.evaluate("""
                 () => {
-                    // Megkeressük az összes task linket (sessionöket)
-                    const links = Array.from(document.querySelectorAll('a.task-container[href^="/session/"]'));
-                    if (links.length > 0) {
-                        links[0].click(); // Legelső = legutóbbi
+                    // Megkeressük a felül lévő 'All' gombot
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const allBtn = buttons.find(b => b.textContent && b.textContent.trim() === 'All');
+                    if (allBtn) {
+                        allBtn.click();
+                    }
+
+                    // Kis késleltetés kellhet az All gomb után, de mi most lekérjük egyből
+                    const links = Array.from(document.querySelectorAll('a[href^="/session/"]'));
+
+                    // Szűrjük ki azokat a linkeket, amik a bal oldali Sidebar-ban (Recent sessions) vannak.
+                    // A Sidebar általában balra van, tehát rect.left < 300,
+                    // a középső tartalmi részen lévő linkek rect.left > 300 lesz.
+                    const contentLinks = links.filter(link => {
+                        const rect = link.getBoundingClientRect();
+                        return rect.left > 300 && rect.width > 0;
+                    });
+
+                    if (contentLinks.length > 0) {
+                        contentLinks[0].click(); // Legelső a listában = legutóbbi session
+                        return true;
+                    } else if (links.length > 0) {
+                        // Fallback, ha a fenti szűrés nem működik valamiért
+                        links[0].click();
                         return true;
                     }
+
                     return false;
                 }
             """)
@@ -119,28 +140,27 @@ async def run_stealth_query(query: str):
 
             print("🚀 'Nyíl' Küldés gomb megnyomása...", file=sys.stderr)
 
-            # Karmester utasítása: "Jobb oldalán a nyíl amivel szöveget küldesz be"
-            # Keresünk egy gombot, ami SVG ikont (nyíl/send) tartalmaz, és látható.
-            sent = await page.evaluate("""
+            # Enter lenyomása az elküldéshez
+            print("🚀 Enter billentyű lenyomása az elküldéshez...", file=sys.stderr)
+
+            await page.evaluate("""
                 () => {
-                    const sendBtns = Array.from(document.querySelectorAll('button[aria-label*="Send"], mat-icon[svgicon*="send"], button[type="submit"]'));
-                    const visibleSendBtns = sendBtns.filter(b => b.offsetWidth > 0 && b.offsetHeight > 0);
-                    if (visibleSendBtns.length > 0) {
-                        const btn = visibleSendBtns[0].closest('button') || visibleSendBtns[0];
-                        btn.click();
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const sendBtn = buttons.find(b => {
+                        const svg = b.querySelector('svg');
+                        return svg && svg.innerHTML.includes('M6 10c-1.1 0-2');
+                    });
+                    if (sendBtn) {
+                        sendBtn.click();
                         return true;
                     }
                     return false;
                 }
             """)
 
-            if sent:
-                print("✅ Nyíl gomb megnyomva! Várunk a szerver válaszára...", file=sys.stderr)
-            else:
-                print("⚠️ Nem találtam nyíl gombot, Entert nyomok...", file=sys.stderr)
-                await chat_input.press("Enter")
 
             await human_like_delay(8.0, 10.0)
+            await page.screenshot(path="/home/misi/Jules_mx/temp/success_screenshot.png")
 
             result_data = {
                 "status": "success",
