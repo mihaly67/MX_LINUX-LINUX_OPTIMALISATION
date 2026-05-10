@@ -2,8 +2,20 @@
 import asyncio
 import sys
 import json
+import random
 import os
 from playwright.async_api import async_playwright
+
+async def human_like_typing(locator, text: str):
+    for char in text:
+        delay = random.uniform(0.05, 0.15)
+        if random.random() < 0.05:
+            delay += random.uniform(0.3, 0.8)
+        await locator.type(char, delay=int(delay * 1000))
+        await asyncio.sleep(delay)
+
+async def human_like_delay(min_sec=1.5, max_sec=4.0):
+    await asyncio.sleep(random.uniform(min_sec, max_sec))
 
 def clean_cookies(cookies):
     valid_same_site = ["Strict", "Lax", "None"]
@@ -21,8 +33,11 @@ def clean_cookies(cookies):
                 cookie.pop(key)
     return cookies
 
-async def explore_accessibility():
-    url = "https://jules.google.com/session"
+async def run_stealth_query(query: str):
+    print(f"🕵️ Gerilla RAG AI-to-AI Indítása. Feladat: {query}", file=sys.stderr)
+
+    # 1. BIZTONSÁGI LÉPÉS: Közvetlen ugrás a Raj8 Codebase Overview-ba
+    url = "https://jules.google.com/repo/github/mihaly67/Raj8"
     cookie_path = "/home/misi/Jules_mx/cookie.json"
 
     async with async_playwright() as p:
@@ -38,6 +53,7 @@ async def explore_accessibility():
             with open(cookie_path, 'r') as f:
                 cookies = json.load(f)
             await context.add_cookies(clean_cookies(cookies))
+            print("✅ Sütik betöltve.", file=sys.stderr)
         else:
             print("❌ Sütifájl nem található! Kilépés.", file=sys.stderr)
             await browser.close()
@@ -46,42 +62,103 @@ async def explore_accessibility():
         page = await context.new_page()
 
         try:
+            print(f"⏳ Navigálás a Raj8 Codebase-be: {url}", file=sys.stderr)
             await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            await asyncio.sleep(8.0)
+            await human_like_delay(4.0, 6.0)
 
-            # Kattintsunk az első session linkre JS-ből, mert onnan nyílik meg a chat mező
-            await page.evaluate("""
+            # 2. SESSION KIVÁLASZTÁSA JS ALAPJÁN
+            print("👁️ Keresem az utolsó sessiont (Completed) JavaScript alapú kattintással...", file=sys.stderr)
+            clicked = await page.evaluate("""
                 () => {
-                    const sessionLinks = Array.from(document.querySelectorAll('a.task-container[href^="/session/"]'));
-                    if (sessionLinks.length > 0) {
-                        sessionLinks[0].click();
+                    // Megkeressük az összes task linket (sessionöket)
+                    const links = Array.from(document.querySelectorAll('a.task-container[href^="/session/"]'));
+                    if (links.length > 0) {
+                        links[0].click(); // Legelső = legutóbbi
+                        return true;
                     }
+                    return false;
                 }
             """)
-            await asyncio.sleep(5.0)
 
-            client = await page.context.new_cdp_session(page)
-            await client.send('DOM.enable')
-            await client.send('Accessibility.enable')
-            ax_tree = await client.send('Accessibility.getFullAXTree')
+            if clicked:
+                print("✅ Sikeres belépés az utolsó sessionbe!", file=sys.stderr)
+                await human_like_delay(6.0, 8.0) # Várunk, amíg betölt a chatmező alul
+            else:
+                raise Exception("Nem találtam sessiont a Raj8 Overview-ban!")
 
-            def extract_nodes(nodes):
-                res = []
-                for node in nodes:
-                    role = node.get('role', {}).get('value', '')
-                    name = node.get('name', {}).get('value', '')
-                    if role in ['button', 'textbox', 'link'] and name:
-                        res.append(f"[{role}] {name}")
-                    elif role == 'textbox':
-                        res.append(f"[{role}] Névtelen TextBox")
-                return res
+            # 3. CHAT MEZŐ KERESÉSE
+            print("👁️ Keresem az alsó Chat beviteli mezőt...", file=sys.stderr)
+            chat_input = None
+            selectors = [
+                "textarea[placeholder*='essage']",
+                "textarea",
+                "div[contenteditable='true']",
+                "input[type='text']"
+            ]
 
-            nodes = extract_nodes(ax_tree.get('nodes', []))
+            for selector in selectors:
+                locs = await page.locator(selector).all()
+                for loc in locs:
+                    if await loc.is_visible():
+                        chat_input = loc
+                        print(f"✅ Beviteli mező megtalálva ({selector})", file=sys.stderr)
+                        break
+                if chat_input:
+                    break
 
-            print("================ SESSION UI TÉRKÉP ================", file=sys.stderr)
-            for item in nodes:
-                print(item, file=sys.stderr)
-            print("====================================================\n", file=sys.stderr)
+            if not chat_input:
+                await page.screenshot(path="/home/misi/Jules_mx/temp/error_screenshot.png")
+                raise Exception("Nem találtam a chat beviteli mezőt! Képernyőkép mentve.")
+
+            # 4. ÜZENET KÜLDÉSE
+            print("⌨️ Üzenet gépelése a Raj8 számára...", file=sys.stderr)
+            await chat_input.focus()
+            await human_like_delay(0.5, 1.5)
+            await human_like_typing(chat_input, query)
+            await human_like_delay(1.0, 2.5)
+
+            print("🚀 'Nyíl' Küldés gomb megnyomása...", file=sys.stderr)
+
+            # Karmester utasítása: "Jobb oldalán a nyíl amivel szöveget küldesz be"
+            # Keresünk egy gombot, ami SVG ikont (nyíl/send) tartalmaz, és látható.
+            sent = await page.evaluate("""
+                () => {
+                    const sendBtns = Array.from(document.querySelectorAll('button[aria-label*="Send"], mat-icon[svgicon*="send"], button[type="submit"]'));
+                    const visibleSendBtns = sendBtns.filter(b => b.offsetWidth > 0 && b.offsetHeight > 0);
+                    if (visibleSendBtns.length > 0) {
+                        const btn = visibleSendBtns[0].closest('button') || visibleSendBtns[0];
+                        btn.click();
+                        return true;
+                    }
+                    return false;
+                }
+            """)
+
+            if sent:
+                print("✅ Nyíl gomb megnyomva! Várunk a szerver válaszára...", file=sys.stderr)
+            else:
+                print("⚠️ Nem találtam nyíl gombot, Entert nyomok...", file=sys.stderr)
+                await chat_input.press("Enter")
+
+            await human_like_delay(8.0, 10.0)
+
+            result_data = {
+                "status": "success",
+                "message": "AI-to-AI köszöntés elküldve Raj8-nak.",
+                "url": page.url,
+                "simulated_query": query
+            }
+
+            import datetime
+            collector_dir = "/home/misi/Jules_mx/temp/stealth_collector"
+            os.makedirs(collector_dir, exist_ok=True)
+            filename = f"raj8_greeting_{datetime.datetime.now().strftime('%H%M%S')}.json"
+            filepath = os.path.join(collector_dir, filename)
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(result_data, f, indent=2, ensure_ascii=False)
+
+            print(f"📁 Eredmény mentve: {filepath}", file=sys.stderr)
 
         except Exception as e:
             print(json.dumps({"status": "error", "error": str(e)}))
@@ -89,4 +166,9 @@ async def explore_accessibility():
             await browser.close()
 
 if __name__ == "__main__":
-    asyncio.run(explore_accessibility())
+    if len(sys.argv) < 2:
+        print("Használat: python3 browser_stealth_manager.py <query>")
+        sys.exit(1)
+
+    user_query = " ".join(sys.argv[1:])
+    asyncio.run(run_stealth_query(user_query))
