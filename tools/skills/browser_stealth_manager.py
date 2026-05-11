@@ -1,194 +1,180 @@
-#!/usr/bin/env python3
-import asyncio
+import os
 import sys
+import asyncio
 import json
 import random
-import os
+import argparse
 from playwright.async_api import async_playwright
 
-async def human_like_typing(locator, text: str):
+async def human_like_typing(element, text):
     for char in text:
-        delay = random.uniform(0.05, 0.15)
-        if random.random() < 0.05:
-            delay += random.uniform(0.3, 0.8)
-        await locator.type(char, delay=int(delay * 1000))
-        await asyncio.sleep(delay)
+        await element.type(char, delay=random.uniform(30, 80))
+    await asyncio.sleep(random.uniform(0.5, 1.2))
 
-async def human_like_delay(min_sec=1.5, max_sec=4.0):
-    await asyncio.sleep(random.uniform(min_sec, max_sec))
+def parse_accessibility_tree(node, elements, target_roles=['button', 'textbox', 'link']):
+    '''Rekurzív függvény a DOM értelmezésére a CDP Accessibility Tree alapján (LaVague / browser-use módszer)'''
+    if 'role' in node and node['role'] in target_roles:
+        name = node.get('name', '')
+        if name or node['role'] == 'textbox':
+            elements.append(node)
 
-def clean_cookies(cookies):
-    valid_same_site = ["Strict", "Lax", "None"]
-    for cookie in cookies:
-        if 'sameSite' in cookie:
-            if cookie['sameSite'] is None:
-                cookie.pop('sameSite')
-            elif cookie['sameSite'] not in valid_same_site:
-                if str(cookie['sameSite']).lower() == "no_restriction":
-                    cookie['sameSite'] = "None"
-                else:
-                    cookie.pop('sameSite')
-        for key in ['hostOnly', 'session', 'storeId', 'id', 'partitionKey']:
-            if key in cookie:
-                cookie.pop(key)
-    return cookies
+    if 'children' in node:
+        for child in node['children']:
+            parse_accessibility_tree(child, elements, target_roles)
 
-async def run_stealth_query(query: str):
-    print(f"🕵️ Gerilla RAG AI-to-AI Indítása. Feladat: {query}", file=sys.stderr)
+async def analyze_and_act(page, query):
+    print(">> Oldal elemzése (Accessibility Tree kinyerése)...")
+    await page.wait_for_timeout(3000)
 
-    # 1. BIZTONSÁGI LÉPÉS: Közvetlen ugrás a Raj8 Codebase Overview-ba
-    url = "https://jules.google.com/repo/github/mihaly67/Raj8/overview"
+    # 1. Navigáció a sessionre (Overview oldalon)
+    try:
+        print(">> Legutóbbi session kiválasztása...")
+        # Mivel az overview oldalon vagyunk, keressük meg a legelső session linket (pl. dátum alapú, vagy "Session" feliratú)
+        # Az A11y fában a session-ök általában linkként szerepelnek a dátummal (pl. "May 9" vagy "Máj 9")
+
+        # Először kinyerjük az A11y fát, hogy megtaláljuk a session linket
+        snapshot = await page.accessibility.snapshot()
+        elements = []
+        parse_accessibility_tree(snapshot, elements)
+
+        session_clicked = False
+        for e in elements:
+            # Megkeresünk egy linket, aminek a nevében dátum formátum van (pl. Máj, May, Jun, stb.)
+            # vagy egyszerűen rákattintunk az első 'link' elemre az oldalon, ami nem navigációs menü
+            if e.get('role') == 'link' and ('Máj' in e.get('name', '') or 'May' in e.get('name', '') or 'Jules VPS' in e.get('name', '')):
+                print(f">> Kattintás a session linkre: {e.get('name')}")
+                await page.get_by_role("link", name=e.get('name')).first.click(force=True)
+                await page.wait_for_timeout(4000)
+                session_clicked = True
+                break
+
+        if not session_clicked:
+            # Fallback: a régi vizuális koordináta logika is jól működött a main content area-ban
+            print(">> Próbálkozás a JS alapú navigációval (koordináta alapján)...")
+            await page.evaluate("""() => {
+                const links = document.querySelectorAll('a');
+                for (let a of links) {
+                    const rect = a.getBoundingClientRect();
+                    if (rect.left > 300 && rect.width > 200) {
+                        a.click();
+                        return;
+                    }
+                }
+            }""")
+            await page.wait_for_timeout(4000)
+
+    except Exception as e:
+        print(f">> Session navigációs kísérlet befejeződött: {e}")
+
+    # Újra kinyerjük a fát az új oldalon
+    snapshot = await page.accessibility.snapshot()
+    elements = []
+    parse_accessibility_tree(snapshot, elements)
+
+    print(">> Letisztított interaktív elemek (A11y Tree):")
+    textarea_name = None
+
+    for idx, e in enumerate(elements):
+        role = e.get('role')
+        name = e.get('name', '')
+        print(f"   - [ID: {idx}] {role.upper()}: \"{name}\"")
+
+        if role == 'textbox' or "Type a message" in name or "Message" in name or "Chat" in name:
+            textarea_name = name
+
+    try:
+        print(f">> Megtaláltam a beviteli mezőt. Gépelés...")
+        input_element = None
+
+        # Próbáljuk placeholder alapján, ha van neve
+        if textarea_name:
+            input_element = page.get_by_placeholder(textarea_name).first
+
+        # Ha nincs, fallback a sima textarea-ra
+        if not input_element or not await input_element.is_visible():
+            input_element = page.locator('textarea').first
+
+        await input_element.click(force=True)
+        await human_like_typing(input_element, query)
+
+        print(">> Próbálom elküldeni...")
+        try:
+            # Kombináltuk a JS SVG gomb nyomásunkat (ami eddig az egyetlen megbízható mód volt az oldalon)
+            button_found = await page.evaluate('''() => {
+                const svgs = document.querySelectorAll('svg path');
+                for(let p of svgs) {
+                    if(p.getAttribute('d').startsWith('M6 10c-1.1 0-2')) {
+                        const btn = p.closest('button');
+                        if (btn) {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }''')
+
+            if not button_found:
+                raise Exception("Send button SVG nem található az oldalon")
+        except Exception as e:
+            print(f">> Fallback Enter gomb lenyomása... ({e})")
+            await input_element.press("Enter")
+
+        return True
+    except Exception as e:
+        print(f"HIBA a kattintás/gépelés során: {e}")
+        return False
+
+async def run(query: str):
+    print(">> Indítom a Gerilla Playwright szimulátort (A11y DOM-Navigációs mód)...")
+
     cookie_path = "/home/misi/Jules_mx/cookie.json"
+    temp_auth_path = "/home/misi/Jules_mx/temp/cline_auth.json"
+
+    if not os.path.exists(cookie_path):
+        print(f"HIBA: Nem található a cookie fájl: {cookie_path}")
+        return
+
+    with open(cookie_path, 'r', encoding='utf-8') as f:
+        cookies = json.load(f)
+
+    valid_cookies = []
+    for c in cookies:
+        if c.get("sameSite") == "NoneType":
+            del c["sameSite"]
+        if "partitionKey" in c:
+            del c["partitionKey"]
+        valid_cookies.append(c)
+
+    os.makedirs(os.path.dirname(temp_auth_path), exist_ok=True)
+    with open(temp_auth_path, 'w', encoding='utf-8') as f:
+        json.dump({"cookies": valid_cookies, "origins": []}, f)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': 1920, 'height': 1080},
-            java_script_enabled=True,
-            locale="hu-HU"
-        )
-
-        if os.path.exists(cookie_path):
-            with open(cookie_path, 'r') as f:
-                cookies = json.load(f)
-            await context.add_cookies(clean_cookies(cookies))
-            print("✅ Sütik betöltve.", file=sys.stderr)
-        else:
-            print("❌ Sütifájl nem található! Kilépés.", file=sys.stderr)
-            await browser.close()
-            return
-
+        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        context = await browser.new_context(storage_state=temp_auth_path)
         page = await context.new_page()
 
-        try:
-            print(f"⏳ Navigálás a Raj8 Codebase-be: {url}", file=sys.stderr)
-            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-            await human_like_delay(4.0, 6.0)
+        await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-            # 2. SESSION KIVÁLASZTÁSA JS ALAPJÁN
-            print("👁️ Keresem az utolsó sessiont (Completed) JavaScript alapú kattintással...", file=sys.stderr)
-            clicked = await page.evaluate("""
-                () => {
-                    // Megkeressük a felül lévő 'All' gombot
-                    const buttons = Array.from(document.querySelectorAll('button'));
-                    const allBtn = buttons.find(b => b.textContent && b.textContent.trim() === 'All');
-                    if (allBtn) {
-                        allBtn.click();
-                    }
+        print(">> Navigáció: https://jules.google.com/repo/github/mihaly67/Raj8/overview")
+        await page.goto("https://jules.google.com/repo/github/mihaly67/Raj8/overview", wait_until="networkidle")
 
-                    // Kis késleltetés kellhet az All gomb után, de mi most lekérjük egyből
-                    const links = Array.from(document.querySelectorAll('a[href^="/session/"]'));
+        success = await analyze_and_act(page, query)
 
-                    // Szűrjük ki azokat a linkeket, amik a bal oldali Sidebar-ban (Recent sessions) vannak.
-                    // A Sidebar általában balra van, tehát rect.left < 300,
-                    // a középső tartalmi részen lévő linkek rect.left > 300 lesz.
-                    const contentLinks = links.filter(link => {
-                        const rect = link.getBoundingClientRect();
-                        return rect.left > 300 && rect.width > 0;
-                    });
+        if success:
+            print(">> Üzenet sikeresen elküldve! Várakozás a képernyőképhez...")
+            await page.wait_for_timeout(5000)
+            screenshot_path = "/home/misi/Jules_mx/temp/success_screenshot.png"
+            await page.screenshot(path=screenshot_path, full_page=True)
+            print(f">> Képernyőkép mentve: {screenshot_path}")
 
-                    if (contentLinks.length > 0) {
-                        contentLinks[0].click(); // Legelső a listában = legutóbbi session
-                        return true;
-                    } else if (links.length > 0) {
-                        // Fallback, ha a fenti szűrés nem működik valamiért
-                        links[0].click();
-                        return true;
-                    }
-
-                    return false;
-                }
-            """)
-
-            if clicked:
-                print("✅ Sikeres belépés az utolsó sessionbe!", file=sys.stderr)
-                await human_like_delay(6.0, 8.0) # Várunk, amíg betölt a chatmező alul
-            else:
-                raise Exception("Nem találtam sessiont a Raj8 Overview-ban!")
-
-            # 3. CHAT MEZŐ KERESÉSE
-            print("👁️ Keresem az alsó Chat beviteli mezőt...", file=sys.stderr)
-            chat_input = None
-            selectors = [
-                "textarea[placeholder*='essage']",
-                "textarea",
-                "div[contenteditable='true']",
-                "input[type='text']"
-            ]
-
-            for selector in selectors:
-                locs = await page.locator(selector).all()
-                for loc in locs:
-                    if await loc.is_visible():
-                        chat_input = loc
-                        print(f"✅ Beviteli mező megtalálva ({selector})", file=sys.stderr)
-                        break
-                if chat_input:
-                    break
-
-            if not chat_input:
-                await page.screenshot(path="/home/misi/Jules_mx/temp/error_screenshot.png")
-                raise Exception("Nem találtam a chat beviteli mezőt! Képernyőkép mentve.")
-
-            # 4. ÜZENET KÜLDÉSE
-            print("⌨️ Üzenet gépelése a Raj8 számára...", file=sys.stderr)
-            await chat_input.focus()
-            await human_like_delay(0.5, 1.5)
-            await human_like_typing(chat_input, query)
-            await human_like_delay(1.0, 2.5)
-
-            print("🚀 'Nyíl' Küldés gomb megnyomása...", file=sys.stderr)
-
-            # Enter lenyomása az elküldéshez
-            print("🚀 Enter billentyű lenyomása az elküldéshez...", file=sys.stderr)
-
-            await page.evaluate("""
-                () => {
-                    const buttons = Array.from(document.querySelectorAll('button'));
-                    const sendBtn = buttons.find(b => {
-                        const svg = b.querySelector('svg');
-                        return svg && svg.innerHTML.includes('M6 10c-1.1 0-2');
-                    });
-                    if (sendBtn) {
-                        sendBtn.click();
-                        return true;
-                    }
-                    return false;
-                }
-            """)
-
-
-            await human_like_delay(8.0, 10.0)
-            await page.screenshot(path="/home/misi/Jules_mx/temp/success_screenshot.png")
-
-            result_data = {
-                "status": "success",
-                "message": "AI-to-AI köszöntés elküldve Raj8-nak.",
-                "url": page.url,
-                "simulated_query": query
-            }
-
-            import datetime
-            collector_dir = "/home/misi/Jules_mx/temp/stealth_collector"
-            os.makedirs(collector_dir, exist_ok=True)
-            filename = f"raj8_greeting_{datetime.datetime.now().strftime('%H%M%S')}.json"
-            filepath = os.path.join(collector_dir, filename)
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-
-            print(f"📁 Eredmény mentve: {filepath}", file=sys.stderr)
-
-        except Exception as e:
-            print(json.dumps({"status": "error", "error": str(e)}))
-        finally:
-            await browser.close()
+        await browser.close()
+        print(">> Folyamat lezárva.")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Használat: python3 browser_stealth_manager.py <query>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Browser Stealth Manager (A11y Simplification)")
+    parser.add_argument("query", help="Az elküldendő üzenet")
+    args = parser.parse_args()
 
-    user_query = " ".join(sys.argv[1:])
-    asyncio.run(run_stealth_query(user_query))
+    asyncio.run(run(args.query))
