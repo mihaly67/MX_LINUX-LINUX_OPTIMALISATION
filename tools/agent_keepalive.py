@@ -6,12 +6,14 @@ import datetime
 def run_daemon():
     """
     Egy nagyon könnyű (0.01% CPU), végtelen ciklusú háttérfolyamat (Daemon),
-    amely nemcsak az Agent UI (Cloudflare/Docker) fagyását akadályozza meg
-    szívveréssel (I/O event generálás), hanem SUPERVISOR-ként is működik.
+    amely megakadályozza az Agent UI (Cloudflare/Docker) fagyását
+    szívveréssel (I/O event generálás).
 
-    Ha a Hosszútávú Memória fájlt (agent_memory.jsonl) túl régóta (pl. 20 perc)
-    nem módosította az Agent, hangos figyelmeztetést (ALERT) ír a logba,
-    amit az Agent észrevehet, mielőtt elveszítené a kontextust!
+    Extra (Karmester Kérés):
+    Az emberi figyelem korrigálására bizonyos időközönként beletesz egy
+    "inbox" kulcsszót a konzolba, hogy automatikusan ébren tartsa az Agentek
+    fájl-alapú Swarm kommunikációs figyelem-ciklusát, anélkül hogy a Karmesternek
+    folyamatosan be kéne írnia.
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     keepalive_file = os.path.join(script_dir, ".agent_heartbeat")
@@ -20,11 +22,13 @@ def run_daemon():
     base_dir = os.path.dirname(script_dir)
     memory_file = os.path.join(base_dir, "Knowledge_Base", "agent_memory.jsonl")
 
-    # Mivel egy agent turn kb 2-5 perc, 15-20 perc memóriaírás nélkül már aggasztó
     MEMORY_STALE_WARNING_SECONDS = 20 * 60
+    INBOX_REMINDER_SECONDS = 3 * 60  # 3 percenként nyom egy "inbox" pinget
 
-    print(f"💓 [Supervisor Daemon] Elindult. Folyamatos szívverés generálása: {keepalive_file}", flush=True)
+    print(f"💓 [Supervisor Daemon] Elindult. Szívverés fájl: {keepalive_file}", flush=True)
     print(f"🧠 [Supervisor Daemon] Memória figyelve: {memory_file}", flush=True)
+
+    last_inbox_time = time.time()
 
     while True:
         try:
@@ -43,9 +47,12 @@ def run_daemon():
                     minutes_stale = int(time_since_modified / 60)
                     print(f"\n🚨 [SUPERVISOR ALERT] AZ AGENT ELFELEJTETTE ÍRNI A MEMÓRIÁT! 🚨")
                     print(f"⚠️ Utolsó írás: {minutes_stale} perce történt.")
-                    print(f"👉 KÖTELEZŐ AKCIÓ: Futtasd azonnal a 'python3 ENVIRONMENT_SETUP/agent_memory_manager.py --action write ...' parancsot a szinkronizációhoz!\n", flush=True)
-            else:
-                 print(f"⚠️ [SUPERVISOR ALERT] A memória fájl ({memory_file}) NEM LÉTEZIK! Használd a memory managert a létrehozásához!", flush=True)
+                    print(f"👉 KÖTELEZŐ AKCIÓ: Futtasd azonnal a 'python3 ENVIRONMENT_SETUP/agent_memory_manager.py --action write ...' parancsot!\n", flush=True)
+
+            # 3. Automata 'inbox' Ping (Karmester Kérés)
+            if current_time - last_inbox_time > INBOX_REMINDER_SECONDS:
+                print("\n📨 [AUTO-TRIGGER] inbox", flush=True)
+                last_inbox_time = current_time
 
             # Flusholjuk a standard kimenetet is
             sys.stdout.flush()
@@ -58,8 +65,6 @@ def run_daemon():
             break
         except Exception as e:
             print(f"\n❌ [Supervisor Daemon] Kritikus hiba a háttérben: {e}", file=sys.stderr, flush=True)
-            # Az önreflexió jegyében, ha lehal a daemon, automatikusan próbáljon újraindulni kis pihenő után,
-            # hogy ne maradjon a rendszer szívverés nélkül (rekurzió nélkül).
             time.sleep(10)
             print("🔄 [Supervisor Daemon] Automatikus újraindulás...", flush=True)
             continue
