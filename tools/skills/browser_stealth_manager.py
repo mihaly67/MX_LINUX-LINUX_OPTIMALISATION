@@ -12,7 +12,6 @@ async def human_like_typing(element, text):
     await asyncio.sleep(random.uniform(0.5, 1.2))
 
 def parse_accessibility_tree(node, elements, target_roles=['button', 'textbox', 'link']):
-    '''Rekurzív függvény a DOM értelmezésére a CDP Accessibility Tree alapján (LaVague / browser-use módszer)'''
     if 'role' in node and node['role'] in target_roles:
         name = node.get('name', '')
         if name or node['role'] == 'textbox':
@@ -29,18 +28,12 @@ async def analyze_and_act(page, query):
     # 1. Navigáció a sessionre (Overview oldalon)
     try:
         print(">> Legutóbbi session kiválasztása...")
-        # Mivel az overview oldalon vagyunk, keressük meg a legelső session linket (pl. dátum alapú, vagy "Session" feliratú)
-        # Az A11y fában a session-ök általában linkként szerepelnek a dátummal (pl. "May 9" vagy "Máj 9")
-
-        # Először kinyerjük az A11y fát, hogy megtaláljuk a session linket
         snapshot = await page.accessibility.snapshot()
         elements = []
         parse_accessibility_tree(snapshot, elements)
 
         session_clicked = False
         for e in elements:
-            # Megkeresünk egy linket, aminek a nevében dátum formátum van (pl. Máj, May, Jun, stb.)
-            # vagy egyszerűen rákattintunk az első 'link' elemre az oldalon, ami nem navigációs menü
             if e.get('role') == 'link' and ('Máj' in e.get('name', '') or 'May' in e.get('name', '') or 'Jules VPS' in e.get('name', '')):
                 print(f">> Kattintás a session linkre: {e.get('name')}")
                 await page.get_by_role("link", name=e.get('name')).first.click(force=True)
@@ -49,7 +42,6 @@ async def analyze_and_act(page, query):
                 break
 
         if not session_clicked:
-            # Fallback: a régi vizuális koordináta logika is jól működött a main content area-ban
             print(">> Próbálkozás a JS alapú navigációval (koordináta alapján)...")
             await page.evaluate("""() => {
                 const links = document.querySelectorAll('a');
@@ -86,11 +78,9 @@ async def analyze_and_act(page, query):
         print(f">> Megtaláltam a beviteli mezőt. Gépelés...")
         input_element = None
 
-        # Próbáljuk placeholder alapján, ha van neve
         if textarea_name:
             input_element = page.get_by_placeholder(textarea_name).first
 
-        # Ha nincs, fallback a sima textarea-ra
         if not input_element or not await input_element.is_visible():
             input_element = page.locator('textarea').first
 
@@ -99,7 +89,6 @@ async def analyze_and_act(page, query):
 
         print(">> Próbálom elküldeni...")
         try:
-            # Kombináltuk a JS SVG gomb nyomásunkat (ami eddig az egyetlen megbízható mód volt az oldalon)
             button_found = await page.evaluate('''() => {
                 const svgs = document.querySelectorAll('svg path');
                 for(let p of svgs) {
@@ -126,7 +115,7 @@ async def analyze_and_act(page, query):
         return False
 
 async def run(query: str):
-    print(">> Indítom a Gerilla Playwright szimulátort (A11y DOM-Navigációs mód)...")
+    print(">> Indítom a Gerilla Playwright szimulátort (Firefox Native Agent Mód)...")
 
     cookie_path = "/home/misi/Jules_mx/cookie.json"
     temp_auth_path = "/home/misi/Jules_mx/temp/cline_auth.json"
@@ -151,29 +140,49 @@ async def run(query: str):
         json.dump({"cookies": valid_cookies, "origins": []}, f)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        context = await browser.new_context(storage_state=temp_auth_path)
+        # FIREFOX-OT HASZNÁLUNK a blokkolás kikerülésére!
+        print(">> Firefox indítása...")
+        browser = await p.firefox.launch(headless=True)
+        context = await browser.new_context(
+            storage_state=temp_auth_path,
+            viewport={'width': 1280, 'height': 800}
+        )
         page = await context.new_page()
 
         await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         print(">> Navigáció: https://jules.google.com/repo/github/mihaly67/Raj8/overview")
-        await page.goto("https://jules.google.com/repo/github/mihaly67/Raj8/overview", wait_until="networkidle")
 
-        success = await analyze_and_act(page, query)
+        try:
+            # Csak várjuk meg amíg az alap DOM megérkezik
+            await page.goto("https://jules.google.com/repo/github/mihaly67/Raj8/overview", wait_until="domcontentloaded", timeout=60000)
+            print(">> Oldal letöltve. Várakozás 10mp a React hidratálására...")
+            await page.wait_for_timeout(10000)
 
-        if success:
-            print(">> Üzenet sikeresen elküldve! Várakozás a képernyőképhez...")
-            await page.wait_for_timeout(5000)
-            screenshot_path = "/home/misi/Jules_mx/temp/success_screenshot.png"
-            await page.screenshot(path=screenshot_path, full_page=True)
-            print(f">> Képernyőkép mentve: {screenshot_path}")
+            # Készítünk egy képet a legelején, hogy egyáltalán eljutottunk-e az Overviewig
+            await page.screenshot(path="/home/misi/Jules_mx/temp/debug_firefox_overview.png", full_page=True)
+            print(">> Kép lementve: debug_firefox_overview.png")
+
+            success = await analyze_and_act(page, query)
+
+            if success:
+                print(">> Üzenet sikeresen elküldve! Várakozás a képernyőképhez...")
+                await page.wait_for_timeout(5000)
+                screenshot_path = "/home/misi/Jules_mx/temp/success_screenshot_firefox.png"
+                await page.screenshot(path=screenshot_path, full_page=True)
+                print(f">> Képernyőkép mentve: {screenshot_path}")
+            else:
+                print(">> Valami megakadt, hiba screenshot...")
+                await page.screenshot(path="/home/misi/Jules_mx/temp/error_screenshot_firefox.png", full_page=True)
+
+        except Exception as e:
+            print(f">> Kritikus hiba a navigáció során: {e}")
 
         await browser.close()
         print(">> Folyamat lezárva.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Browser Stealth Manager (A11y Simplification)")
+    parser = argparse.ArgumentParser(description="Browser Stealth Manager (Firefox A11y)")
     parser.add_argument("query", help="Az elküldendő üzenet")
     args = parser.parse_args()
 
