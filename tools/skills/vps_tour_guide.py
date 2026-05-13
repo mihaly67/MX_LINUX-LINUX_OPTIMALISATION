@@ -16,54 +16,29 @@ def ask_tour_guide(question=None):
     - OS: MX Linux alapok, Ubuntu LTS / Debian kompatibilitás.
     - Fő munkakönyvtár: `~/Jules_mx/`
 
+    ### 🕰️ ALAPVETŐ PROTOKOLLOK (KÖTELEZŐ) ###
+    - **IDŐZÓNA:** Szigorúan Budapest (Közép-Európa). A hivatkozási év: **2026**.
+    - **MEMÓRIA:** Minden agent szigorúan a saját `agent_memory.jsonl` fájlját írja és olvassa. Soha ne írj bele másik repo memóriájába! (ENVIRONMENT_SETUP/agent_memory_manager.py)
+    - **DINAMIKUS PARANCSNOKSÁG:** Bár ez az infrastruktúra a Jules_mx repóban él, a Karmester kinevezhet más Agenteket (pl. EA Jules, Restauráló) is Rajparancsnoknak, akik ugyanezt az infrastruktúrát fogják használni a Karmester parancsára.
+
     ### 🤖 AUTONÓM TANÁRSEGÉD & SUBAGENTEK ###
     - A Fő asszisztensed: `~/Jules_mx/scripts/vps_teaching_assistant.py` (ReAct minta, eszközei: bash, evaluate, handoff, browser).
-    - Handoff (Delegálás): Ha egy probléma túl komplex, a Tanársegéd képes a `handoff` (Delegál) eszközzel átadni a feladatot az Ollama Llama 3 8B Specialistának.
-    - AI Evaluator: Az `evaluate` eszközzel a Tanársegéd képes más kimeneteket lepontozni (Memary framework logika).
-    - Stealth Browser: A `browser` eszköz a `browser_stealth_manager.py` segítségével CDP protokollon fej nélküli (headless) Chromiumot futtat (kikerülve a bot-szűrőket).
-    - RAG Elemző: `~/Jules_mx/scripts/vps_findings_analyst.py` (Bash grep + LLM szintézis a OOM ellen).
-
-    ### 📚 RAG (RETRIEVAL-AUGMENTED GENERATION) ADATBÁZISOK ###
-    A VPS elsődleges célja az AI frameworkök és kódok RAG feldolgozása. A scoutok (gemini_scout.py, llama3_scout.py) csak forráskódra (.py, .js, .c stb.) szűrnek.
-    1. Chatbot RAG: `~/Rag_epites, chatbot_csv_data_llm_RAG/RAG_CHATBOT_CSV_DATA_LLM_github.db` (Befejezve: ~72%)
-    2. Gerilla RAG: `~/Gerilla_RAG/Gerilla_RAG.db` (Befejezve: ~23%)
-    3. MX_Linux RAG: `~/MX_LINUX_RAG/mx_linux_knowledge.db` (Befejezve: ~2%)
-
-    A találati JSON fájlok a `~/Jules_mx/alerts/{RAG_NEVE}/` könyvtárban gyűlnek.
-    A `generate_markdown_report.py` generálja az összesítést az `alerts_summary.md` fájlba.
-
-    ### 🔒 BIZTONSÁG & API ###
-    - JWT Hitelesítés: `cognee_jwt_auth.py` a lokális repóban generálja a tokeneket a `VPS_JWT_SECRET` környezeti változó alapján.
-    - API Végpontok: A `vps_micro_server.py` a 8000-es porton fut, és olyan végpontokat ad, mint `/execute_async`, `/rag_search`, `/code_assist`.
-    - Ollama API: 11434-es port.
-    - Biztonságos SSH: Az SSH kulcs beállítása a lokális `restore_env_mx.py` futtatásával történik, ami a `VPS_SSH_KEY` változót használja.
-
-    ### 💡 KÖVETKEZŐ LÉPÉS EGY ÚJ JULES SZÁMÁRA ###
-    Mivel a Chatbot RAG 72%-nál jár és rengeteg komplex frameworkot (Memary, OpenViking, Mem0) fedezett fel,
-    a te feladatod az, hogy ezekből a JSON fájlokból származó rekurzív/iteratív és kontextus-kezelő logikákat
-    beépítsd a Fő Agent (Jules) lokális képességei (skills) közé, vagy továbbfejleszd a VPS Tanársegédet!
-
+    - Handoff (Delegálás): Ha egy probléma túl komplex, a Tanársegéd képes a `handoff` eszközzel átadni a feladatot az Ollama Specialistának.
+    - Stealth Browser: A `browser` eszköz a `browser_stealth_manager.py` segítségével.
 
     ### 🔌 JULES TEAM & MCP SZERVER (Model Context Protocol) ###
-    A legfontosabb fegyvered a lokális memóriakorlátok (OOM és Lost in the middle) ellen a VPS MCP Szervere.
     A VPS-en fut a FastMCP (vps_mcp_server.py), amit a lokális 'tools/skills/mcp_bridge_tool.py'-on keresztül érhetsz el stdio over SSH módszerrel.
+    MCP képességek (Toolok): 'execute_bash', 'search_rag_database', 'fetch_webpage_mcp', 'create_full_backup'.
 
-    Elérhető MCP képességek (Toolok):
-    - 'execute_bash': Biztonságos parancsfuttatás a VPS-en (8 mag, 24GB RAM).
-    - 'search_rag_database': Archival Memory kereső. Pillanatok alatt keres a gigantikus FAISS/SQLite RAG adatbázisokban (Gerilla, Chatbot, BRAIN2) anélkül, hogy le kéne töltened azokat!
-    - 'read_memory_register' / 'write_memory_register': Core Memory állapotmentés a VPS-re.
-    - 'fetch_webpage_mcp': Stealth (BeautifulSoup) weboldal letöltő a VPS IP-jéről.
-    - 'github_read_file' / 'github_search_repos': GitHub API integráció a világ kódjainak letöltésére.
-    - 'create_full_backup': On-demand tar.gz backup a VPS-ről.
+    ### 🐝 SWARM FÁJL-ALAPÚ KOMMUNIKÁCIÓ (AZ "INBOX" SZABÁLY) ###
+    A korábbi SQLite/Daemon orchestrator rendszert kidobtuk. A Multi-Agent kommunikáció a VPS fájlrendszerén keresztül történik!
+    1. **Inbox:** `/home/misi/Jules_mx/temp/inbox/` (Itt kapják a rajtagok a feladatokat).
+    2. **Outbox:** `/home/misi/Jules_mx/temp/outbox/` (Itt adják le a rajtagok a válaszokat a Fő Agentnek).
+    3. **A Trigger ("inbox" parancs):** Nincsenek erőforrás-pazarló Watcher démonok! A Karmester (emberi API) fogja beírni neked a chatbe, hogy "inbox", amikor üzeneted jött. (Illetve az `agent_keepalive.py` 3 percenként nyom egy emlékeztető "inbox" auto-triggert a konzolba, hogy ne aludj be).
 
-    ### 🐝 SWARM ORCHESTRATOR & INBOX (Multi-Agent Rendszer) ###
-    A repókat felkészítettük a Swarm (Rajzás) architektúrára.
-    A VPS-en futó MCP szerver SQLite adatbázisán keresztül az Agentek üzenhetnek egymásnak ('send_agent_message') vagy
-    elosztott feladatokat ('create_swarm_job', 'get_next_swarm_job') vehetnek fel, így a RAG feldolgozás és a
-    fejlesztés párhuzamosítható a különböző GitHub repók (különböző Jules Sessionök) között!
+    Ha megkapod az "inbox" parancsot, AZONNAL olvasd el az MCP-vel az `inbox` vagy `outbox` mappádat, és hajtsd végre a benne lévő fájl utasításait!
 
     =======================================================
-
     """
 
     if question:
